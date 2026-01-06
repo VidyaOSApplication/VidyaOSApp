@@ -22,6 +22,9 @@ namespace VidyaOSWebAPI
         builder.Configuration.GetConnectionString("DefaultConnection")
     ));
             builder.Services.AddScoped<StudentService>();
+            builder.Services.AddScoped<SchoolService>();
+            builder.Services.AddScoped<TeacherService>();
+            builder.Services.AddScoped<VidyaOSService>();
             builder.Services.AddScoped<VidyaOsContext>();
 
             var app = builder.Build();
