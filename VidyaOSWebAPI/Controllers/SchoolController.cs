@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using VidyaOSServices.Services;
 
 namespace VidyaOSWebAPI.Controllers
 {
@@ -7,6 +8,10 @@ namespace VidyaOSWebAPI.Controllers
     [ApiController]
     public class SchoolController : ControllerBase
     {
-        //StudentsController 
+        private readonly StudentService _studentService;
+        public SchoolController(StudentService service)
+        {
+            _studentService = service;
+        }
     }
 }
