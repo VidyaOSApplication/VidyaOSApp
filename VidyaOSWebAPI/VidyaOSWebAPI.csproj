@@ -20,4 +20,8 @@
     <ProjectReference Include="..\VidyaOSServices\VidyaOSServices.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="DTOs\" />
+  </ItemGroup>
+
 </Project>
