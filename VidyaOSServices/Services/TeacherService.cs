@@ -1,12 +1,19 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VidyaOSDAL.Models;
 
 namespace VidyaOSServices.Services
 {
-    internal class TeacherService
+    public class TeacherService
     {
+        private readonly VidyaOsContext _context;
+        public TeacherService(VidyaOsContext context)
+        {
+            _context = context;
+        }
     }
 }
