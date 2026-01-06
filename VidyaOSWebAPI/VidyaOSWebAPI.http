@@ -1,0 +1,6 @@
+@VidyaOSWebAPI_HostAddress = http://localhost:5262
+
+GET {{VidyaOSWebAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

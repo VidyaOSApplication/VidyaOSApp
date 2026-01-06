@@ -1,0 +1,27 @@
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using VidyaOSServices.Services;
+
+namespace VidyaOSWebAPI.Controllers
+{
+    [Route("api/[controller]/[action]")]
+    [ApiController]
+    public class StudentsController : ControllerBase
+    {
+        private readonly StudentService _studentService;
+        public StudentsController(StudentService service)
+        {
+           _studentService = service;
+        }
+        [HttpGet]
+        public IActionResult GetAllStudents()
+        {
+            var students = _studentService.GetAllStudents();
+            if (students != null && students.Count > 0)
+            {
+                return Ok(students);
+            }
+            return NotFound("No students found");
+        }
+    }
+}
