@@ -8,10 +8,10 @@ namespace VidyaOSWebAPI.Controllers
     [ApiController]
     public class VidyaOSController : ControllerBase
     {
-        private readonly StudentService _studentService;
-        public VidyaOSController(StudentService service)
+        private readonly VidyaOSService _vidyaOSService;
+        public VidyaOSController(VidyaOSService service)
         {
-            _studentService = service;
+            _vidyaOSService = service;
         }
     }
 }
