@@ -16,61 +16,15 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> RegisterSchool(RegisterSchoolRequest request)
+        public async Task<IActionResult> RegisterStudent(
+        StudentRegisterRequest request)
         {
-            try
-            {
-                await _schoolService.RegisterSchoolAsync(request);
+            var result = await _schoolService.RegisterStudentAsync(request);
 
-                return Ok(new
-                {
-                    success = true,
-                    message = "School registered successfully"
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
+            if (!result.Success)
+                return BadRequest(result);
+
+            return Ok(result); // ✅ NO extra wrapping
         }
-
-
-        [HttpPost]
-        public async Task<IActionResult> RegisterStudent(StudentRegisterRequest request)
-        {
-            try
-            {
-                var result = await _schoolService.RegisterStudentAsync(request);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Student registered successfully",
-                    data = result
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                // 🚫 Business conflict
-                return Conflict(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (Exception)
-            {
-                // 🔥 Unexpected error
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "Something went wrong while registering student."
-                });
-            }
-        }
-        }
+    }
     }
