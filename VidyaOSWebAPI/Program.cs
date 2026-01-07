@@ -20,7 +20,8 @@ namespace VidyaOSWebAPI
             builder.Services.AddDbContext<VidyaOsContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection")
-    ));
+    )
+);
             builder.Services.AddScoped<StudentService>();
             builder.Services.AddScoped<SchoolService>();
             builder.Services.AddScoped<TeacherService>();

@@ -3,14 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VidyaOSDAL;
 using VidyaOSDAL.Models;
 
 namespace VidyaOSServices.Services
 {
     public class StudentService
     {
-        private readonly VidyaOsContext _context;
-        public StudentService(VidyaOsContext context)
+        private readonly VidyaOSDAL.VidyaOsContext _context;
+        public StudentService(VidyaOSDAL.VidyaOsContext context)
         {
             _context = context;
         }
