@@ -16,6 +16,30 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         [HttpPost]
+        public async Task<IActionResult> RegisterSchool(RegisterSchoolRequest request)
+        {
+            try
+            {
+                await _schoolService.RegisterSchoolAsync(request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "School registered successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+
+        [HttpPost]
         public async Task<IActionResult> RegisterStudent(StudentRegisterRequest request)
         {
             try
