@@ -1,6 +1,7 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
-using Microsoft.EntityFrameworkCore;
+using VidyaOSDAL.DTOs;
 
 namespace VidyaOSDAL.Models;
 
@@ -14,6 +15,8 @@ public partial class VidyaOsContext : DbContext
         : base(options)
     {
     }
+
+    public virtual DbSet<AdmissionYearSequence> AdmissionYearSequences { get; set; }
 
     public virtual DbSet<Attendance> Attendances { get; set; }
 
@@ -29,7 +32,7 @@ public partial class VidyaOsContext : DbContext
 
     public virtual DbSet<Homework> Homeworks { get; set; }
 
-    public virtual DbSet<LeaveRequest> Leaves { get; set; }
+    public virtual DbSet<Leaf> Leaves { get; set; }
 
     public virtual DbSet<LibraryBook> LibraryBooks { get; set; }
 
@@ -62,12 +65,24 @@ public partial class VidyaOsContext : DbContext
     public virtual DbSet<TimeTable> TimeTables { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
+    public virtual DbSet<StudentRegisterResponse> StudentRegisterResponses { get; set; }
+
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         => optionsBuilder.UseSqlServer("Name=ConnectionStrings:DefaultConnection");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<StudentRegisterResponse>(entity =>
+        {
+            entity.HasNoKey();
+            entity.ToView(null); // important for stored procedures
+        });
+        modelBuilder.Entity<AdmissionYearSequence>(entity =>
+        {
+            entity.HasKey(e => new { e.SchoolId, e.AdmissionYear }).HasName("PK__Admissio__88E0A12B90AFAD47");
+        });
+
         modelBuilder.Entity<Attendance>(entity =>
         {
             entity.HasKey(e => e.AttendanceId).HasName("PK__Attendan__8B69261C514C1CFB");
@@ -130,7 +145,7 @@ public partial class VidyaOsContext : DbContext
             entity.Property(e => e.Title).HasMaxLength(100);
         });
 
-        modelBuilder.Entity<LeaveRequest>(entity =>
+        modelBuilder.Entity<Leaf>(entity =>
         {
             entity.HasKey(e => e.LeaveId).HasName("PK__Leaves__796DB959AF67D1E5");
 
