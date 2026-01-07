@@ -1,4 +1,3 @@
-ï»¿
 
 /* =========================================================
    DATABASE
@@ -12,7 +11,7 @@ USE VidyaOS;
 GO
 
 /* =========================================================
-   CORE TABLES (FROM FIRST SCRIPT â€“ UNCHANGED)
+   CORE TABLES (FROM FIRST SCRIPT – UNCHANGED)
 ========================================================= */
 
 CREATE TABLE Schools (
@@ -157,7 +156,7 @@ CREATE TABLE SubscriptionPlans (
 );
 
 /* =========================================================
-   EXTENSION TABLES (FROM SECOND SCRIPT â€“ ADDED)
+   EXTENSION TABLES (FROM SECOND SCRIPT – ADDED)
 ========================================================= */
 
 CREATE TABLE TimeTables (
@@ -302,6 +301,14 @@ CREATE TABLE SubscriptionPayments (
     CreatedAt DATETIME DEFAULT GETDATE()
 );
 
+CREATE TABLE AdmissionYearSequences (
+    SchoolId INT NOT NULL,
+    AdmissionYear INT NOT NULL,
+    LastSeq INT NOT NULL,
+    PRIMARY KEY (SchoolId, AdmissionYear)
+);
+
+
 PRINT 'VidyaOS database created successfully (merged & conflict-free).';
 
 INSERT INTO Users (SchoolId, Username, PasswordHash, Role, Phone, Email, IsFirstLogin, IsActive)
@@ -428,6 +435,8 @@ INSERT INTO SubscriptionPlans VALUES
 ('Premium',2999,2000,1),
 ('Enterprise',4999,5000,1);
 
+-------Stored procedure to register schools -------------
+Go
 CREATE PROCEDURE sp_RegisterSchool
 (
     @SchoolName NVARCHAR(200),
@@ -655,6 +664,11 @@ BEGIN
 
     COMMIT TRANSACTION;
 END
+
+
+select * from Schools
+
+select * from Users where Username = 'admin@gps.edu'
 
 
 
