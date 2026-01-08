@@ -35,6 +35,7 @@ namespace VidyaOSWebAPI
             builder.Services.AddScoped<AuthHelper>();
             builder.Services.AddScoped<AuthService>();
             builder.Services.AddScoped<CommonService>();
+            builder.Services.AddScoped<StudentHelper>();
             builder.Services.AddScoped<VidyaOSHelper.SchoolHelper.SchoolHelper>();
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

@@ -16,17 +16,6 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> RegisterStudent(
-        StudentRegisterRequest request)
-        {
-            var result = await _schoolService.RegisterStudentAsync(request);
-
-            if (!result.Success)
-                return BadRequest(result);
-
-            return Ok(result); // ✅ NO extra wrapping
-        }
-        [HttpPost]
         public async Task<IActionResult> RegisterSchool(
         VidyaOSDAL.DTOs.RegisterSchoolRequest request)
         {

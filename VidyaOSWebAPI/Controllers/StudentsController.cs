@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using VidyaOSDAL.DTOs;
 using VidyaOSServices.Services;
 
 namespace VidyaOSWebAPI.Controllers
@@ -22,6 +23,18 @@ namespace VidyaOSWebAPI.Controllers
                 return Ok(students);
             }
             return NotFound("No students found");
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> RegisterStudent(
+        StudentRegisterRequest request)
+        {
+            var result = await _studentService.RegisterStudentAsync(request);
+
+            if (!result.Success)
+                return BadRequest(result);
+
+            return Ok(result); // ✅ NO extra wrapping
         }
     }
 }
