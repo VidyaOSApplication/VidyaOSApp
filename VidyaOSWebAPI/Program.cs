@@ -1,6 +1,7 @@
 
 using Microsoft.EntityFrameworkCore;
 using VidyaOSDAL.Models;
+using VidyaOSHelper;
 using VidyaOSServices.Services;
 
 namespace VidyaOSWebAPI
@@ -26,6 +27,7 @@ namespace VidyaOSWebAPI
             builder.Services.AddScoped<TeacherService>();
             builder.Services.AddScoped<VidyaOSService>();
             builder.Services.AddScoped<VidyaOsContext>();
+            builder.Services.AddScoped<TeacherHelper>();
             builder.Services.AddScoped<VidyaOSHelper.SchoolHelper.SchoolHelper>();
 
             var app = builder.Build();

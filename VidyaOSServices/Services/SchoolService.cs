@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
@@ -22,7 +23,7 @@ namespace VidyaOSServices.Services
             _schoolHelper = schoolHelper;
         }
         public async Task<ApiResult<StudentRegisterResponse>> RegisterStudentAsync(
-        StudentRegisterRequest req)
+    StudentRegisterRequest req)
         {
             // ---------- Validation ----------
             if (req == null)
@@ -37,26 +38,19 @@ namespace VidyaOSServices.Services
             if (req.DOB == default)
                 return ApiResult<StudentRegisterResponse>.Fail("Date of birth is required.");
 
-            if (req.DOB == default)
-                return ApiResult<StudentRegisterResponse>
-                    .Fail("Date of birth is required.");
-
-            // ✅ ADD THIS BLOCK
+            // ---------- DOB & AGE VALIDATION ----------
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var dob = DateOnly.FromDateTime(req.DOB);
 
-            // ❌ Future DOB
             if (dob > today)
                 return ApiResult<StudentRegisterResponse>
                     .Fail("Date of birth cannot be in the future.");
 
-            // ❌ Age calculation
             int age = today.Year - dob.Year;
             if (dob > today.AddYears(-age))
                 age--;
 
-            // ❌ Age limits (business rule)
-            if (age < 3 )
+            if (age < 3)
                 return ApiResult<StudentRegisterResponse>
                     .Fail("Student should not be less than 3 years old.");
 
@@ -68,8 +62,9 @@ namespace VidyaOSServices.Services
 
             if (string.IsNullOrWhiteSpace(req.ParentPhone))
                 return ApiResult<StudentRegisterResponse>.Fail("Parent phone is required.");
+
             if (!System.Text.RegularExpressions.Regex.IsMatch(
-        req.ParentPhone.Trim(), @"^[6-9]\d{9}$"))
+                req.ParentPhone.Trim(), @"^[6-9]\d{9}$"))
             {
                 return ApiResult<StudentRegisterResponse>
                     .Fail("Invalid parent phone number.");
@@ -95,15 +90,16 @@ namespace VidyaOSServices.Services
 
             try
             {
-                // ---------- Admission No ----------
+                // ---------- School ----------
                 var school = await _context.Schools
-                                                  .FirstOrDefaultAsync(s => s.SchoolId == req.SchoolId);
+                    .FirstOrDefaultAsync(s => s.SchoolId == req.SchoolId);
 
                 if (school == null)
-                    return ApiResult<StudentRegisterResponse>
-                        .Fail("School not found.");
+                    return ApiResult<StudentRegisterResponse>.Fail("School not found.");
 
+                // ---------- Admission No ----------
                 int admissionYear = int.Parse(req.AcademicYear);
+
                 string admissionNo = await _schoolHelper.GenerateAdmissionNoAsync(
                     req.SchoolId,
                     admissionYear,
@@ -113,19 +109,24 @@ namespace VidyaOSServices.Services
                 // ---------- Roll No ----------
                 int rollNo = await _schoolHelper.GenerateRollNoAsync(req.SectionId);
 
-                // ---------- User ----------
-                string tempPassword = $"{req.FirstName}@{req.DOB.Year}";
+                // ---------- USERNAME (AUTO FROM NAME) ----------
+                string username = await GenerateStudentUsernameAsync(
+                    req.FirstName, req.LastName);
+
+                // ---------- PASSWORD (FirstName + BirthYear) ----------
+                string tempPassword = $"{req.FirstName}{req.DOB.Year}";
                 string passwordHash = BCrypt.Net.BCrypt.HashPassword(tempPassword);
 
+                // ---------- User ----------
                 var user = new User
                 {
                     SchoolId = req.SchoolId,
-                    Username = admissionNo,
+                    Username = username,
                     PasswordHash = passwordHash,
                     Role = "Student",
                     Email = req.Email,
                     Phone = req.ParentPhone,
-                    IsFirstLogin = true,
+                    IsFirstLogin = true,     // 🔥 force change
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -137,7 +138,7 @@ namespace VidyaOSServices.Services
                 var student = new Student
                 {
                     SchoolId = req.SchoolId,
-                    UserId = user.UserId,
+                    UserId = user.UserId,           // 🔥 RELATION
                     AdmissionNo = admissionNo,
                     RollNo = rollNo,
                     FirstName = req.FirstName,
@@ -169,7 +170,7 @@ namespace VidyaOSServices.Services
                     {
                         StudentId = student.StudentId,
                         AdmissionNo = admissionNo,
-                        Username = admissionNo,
+                        Username = username,
                         TempPassword = tempPassword
                     },
                     "Student registered successfully."
@@ -178,51 +179,123 @@ namespace VidyaOSServices.Services
             catch
             {
                 await tx.RollbackAsync();
-                throw; // system failure handled globally
+                throw;
             }
         }
 
-
-
-
-        public async Task RegisterSchoolAsync(RegisterSchoolRequest req)
+        private async Task<string> GenerateStudentUsernameAsync(
+    string firstName, string? lastName)
         {
-            // Basic API validation
-            if (string.IsNullOrWhiteSpace(req.SchoolName))
-                throw new Exception("School name is required");
+            var baseUsername = string.IsNullOrWhiteSpace(lastName)
+                ? firstName.ToLower()
+                : $"{firstName.ToLower()}.{lastName.ToLower()}";
 
-            if (string.IsNullOrWhiteSpace(req.AdminUsername))
-                throw new Exception("Admin username is required");
+            var username = baseUsername;
+            int counter = 1;
 
-            if (string.IsNullOrWhiteSpace(req.AdminPassword))
-                throw new Exception("Admin password is required");
+            while (await _context.Users.AnyAsync(u => u.Username == username))
+            {
+                username = $"{baseUsername}{counter}";
+                counter++;
+            }
 
-            string passwordHash = BCrypt.Net.BCrypt.HashPassword(req.AdminPassword);
-
-            await _context.Database.ExecuteSqlRawAsync(
-                "EXEC sp_RegisterSchool " +
-                "@SchoolName,@SchoolCode,@RegistrationNumber,@YearOfFoundation," +
-                "@BoardType,@AffiliationNumber,@Email,@Phone,@AddressLine1," +
-                "@City,@State,@Pincode,@AdminUsername,@AdminPasswordHash",
-
-                new SqlParameter("@SchoolName", req.SchoolName),
-                new SqlParameter("@SchoolCode", req.SchoolCode ?? ""),
-                new SqlParameter("@RegistrationNumber", req.RegistrationNumber ?? ""),
-                new SqlParameter("@YearOfFoundation", req.YearOfFoundation ?? 0),
-                new SqlParameter("@BoardType", req.BoardType ?? ""),
-                new SqlParameter("@AffiliationNumber", req.AffiliationNumber ?? ""),
-                new SqlParameter("@Email", req.Email ?? ""),
-                new SqlParameter("@Phone", req.Phone ?? ""),
-                new SqlParameter("@AddressLine1", req.AddressLine1 ?? ""),
-                new SqlParameter("@City", req.City ?? ""),
-                new SqlParameter("@State", req.State ?? ""),
-                new SqlParameter("@Pincode", req.Pincode ?? ""),
-                new SqlParameter("@AdminUsername", req.AdminUsername),
-                new SqlParameter("@AdminPasswordHash", passwordHash)
-            );
+            return username;
         }
 
 
+
+
+
+        public async Task<ApiResult<RegisterSchoolResponse>> RegisterSchoolAsync(
+    RegisterSchoolRequest req)
+        {
+            using var tx = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // ---------- VALIDATION ----------
+                if (string.IsNullOrWhiteSpace(req.SchoolName))
+                    return ApiResult<RegisterSchoolResponse>.Fail("School name is required.");
+
+                if (string.IsNullOrWhiteSpace(req.SchoolCode))
+                    return ApiResult<RegisterSchoolResponse>.Fail("School code is required.");
+
+                if (string.IsNullOrWhiteSpace(req.AdminUsername))
+                    return ApiResult<RegisterSchoolResponse>.Fail("Admin username is required.");
+
+                if (string.IsNullOrWhiteSpace(req.AdminPassword))
+                    return ApiResult<RegisterSchoolResponse>.Fail("Admin password is required.");
+
+                if (!Regex.IsMatch(req.Phone, @"^[6-9]\d{9}$"))
+                    return ApiResult<RegisterSchoolResponse>.Fail("Invalid phone number.");
+
+                // ---------- DUPLICATE CHECKS ----------
+                if (await _context.Schools.AnyAsync(s => s.SchoolCode == req.SchoolCode))
+                    return ApiResult<RegisterSchoolResponse>.Fail("School code already exists.");
+
+                if (await _context.Users.AnyAsync(u => u.Username == req.AdminUsername))
+                    return ApiResult<RegisterSchoolResponse>.Fail("Admin username already exists.");
+
+                // ---------- CREATE SCHOOL ----------
+                var school = new School
+                {
+                    SchoolName = req.SchoolName.Trim(),
+                    SchoolCode = req.SchoolCode.Trim().ToUpper(),
+                    RegistrationNumber = req.RegistrationNumber,
+                    YearOfFoundation = req.YearOfFoundation,
+                    BoardType = req.BoardType,
+                    AffiliationNumber = req.AffiliationNumber,
+                    Email = req.Email,
+                    Phone = req.Phone,
+                    AddressLine1 = req.AddressLine1,
+                    City = req.City,
+                    State = req.State,
+                    Pincode = req.Pincode,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.Schools.Add(school);
+                await _context.SaveChangesAsync();
+
+                // ---------- CREATE ADMIN USER ----------
+                var adminUser = new User
+                {
+                    SchoolId = school.SchoolId, // 🔥 RELATION
+                    Username = req.AdminUsername.Trim(),
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.AdminPassword),
+                    Role = "SchoolAdmin",
+                    Email = req.Email,
+                    Phone = req.Phone,
+                    IsFirstLogin = true,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.Users.Add(adminUser);
+                await _context.SaveChangesAsync();
+
+                await tx.CommitAsync();
+
+                return ApiResult<RegisterSchoolResponse>.Ok(
+                    new RegisterSchoolResponse
+                    {
+                        SchoolId = school.SchoolId,
+                        SchoolName = school.SchoolName!,      // ✅ FIX
+                        SchoolCode = school.SchoolCode!,
+                        AdminUserId = adminUser.UserId,
+                        AdminUsername = adminUser.Username!,
+                        CreatedAt = school.CreatedAt!.Value
+                    },
+                    "School registered successfully."
+                );
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
 
     }
 }

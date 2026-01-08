@@ -26,5 +26,16 @@ namespace VidyaOSWebAPI.Controllers
 
             return Ok(result); // ✅ NO extra wrapping
         }
+        [HttpPost]
+        public async Task<IActionResult> RegisterSchool(
+        VidyaOSDAL.DTOs.RegisterSchoolRequest request)
+        {
+            var result = await _schoolService.RegisterSchoolAsync(request);
+
+            if (!result.Success)
+                return BadRequest(result);
+
+            return Ok(result);
+        }
     }
     }
