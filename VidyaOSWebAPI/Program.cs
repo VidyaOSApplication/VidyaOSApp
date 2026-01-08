@@ -3,6 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using VidyaOSDAL.Models;
 using VidyaOSHelper;
 using VidyaOSServices.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+
 
 namespace VidyaOSWebAPI
 {
@@ -28,7 +32,27 @@ namespace VidyaOSWebAPI
             builder.Services.AddScoped<VidyaOSService>();
             builder.Services.AddScoped<VidyaOsContext>();
             builder.Services.AddScoped<TeacherHelper>();
+            builder.Services.AddScoped<AuthHelper>();
+            builder.Services.AddScoped<AuthService>();
+            builder.Services.AddScoped<CommonService>();
             builder.Services.AddScoped<VidyaOSHelper.SchoolHelper.SchoolHelper>();
+            builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateIssuerSigningKey = true,
+
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
+            )
+        };
+    });
 
             var app = builder.Build();
 
