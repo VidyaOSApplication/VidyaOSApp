@@ -15,7 +15,7 @@ namespace VidyaOSWebAPI.Controllers
            _studentService = service;
         }
         [HttpGet]
-        public IActionResult GetAllStudents()
+        public IActionResult GetStudentsForAttendence()
         {
             var students = _studentService.GetAllStudents();
             if (students != null && students.Count > 0)

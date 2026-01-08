@@ -15,7 +15,7 @@ namespace VidyaOSServices.Services
     {
         private readonly VidyaOsContext _context;
         private readonly TeacherHelper _teacherHelper;
-        public TeacherService(VidyaOsContext context,TeacherHelper teacherHelper)
+        public TeacherService(VidyaOsContext context, TeacherHelper teacherHelper)
         {
             _context = context;
             _teacherHelper = teacherHelper;
@@ -106,5 +106,127 @@ namespace VidyaOSServices.Services
                 throw;
             }
         }
-    }
+
+        public async Task<AttendanceFetchResponse> GetStudentsForAttendanceAsync(
+            int schoolId, int classId, int sectionId, DateOnly date)
+        {
+            var students = await _context.Students
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.ClassId == classId &&
+                    s.SectionId == sectionId &&
+                    s.IsActive == true)
+                .OrderBy(s => s.RollNo)
+                .Select(s => new
+                {
+                    s.StudentId,
+                    s.UserId,
+                    s.RollNo,
+                    s.AdmissionNo,
+                    FullName = s.FirstName + " " + s.LastName
+                })
+                .ToListAsync();
+
+            var userIds = students.Select(s => s.UserId).ToList();
+
+            var leaveUserIds = await _context.Leaves
+                .Where(l =>
+                    l.SchoolId == schoolId &&
+                    l.Status == "Approved" &&
+                    date >= l.FromDate &&
+                    date <= l.ToDate)
+                .Select(l => l.UserId)
+                .ToListAsync();
+
+            var attendance = await _context.Attendances
+                .Where(a =>
+                    a.SchoolId == schoolId &&
+                    a.AttendanceDate == date &&
+                    userIds.Contains(a.UserId))
+                .ToListAsync();
+
+            var result = students.Select(s =>
+            {
+                if (leaveUserIds.Contains(s.UserId))
+                {
+                    return new AttendanceStudentDto
+                    {
+                        StudentId = s.StudentId,
+                        UserId = (int)s.UserId,
+                        RollNo = (int)s.RollNo,
+                        AdmissionNo = s.AdmissionNo!,
+                        FullName = s.FullName,
+                        Status = "Leave",
+                        IsEditable = false
+                    };
+                }
+
+                var att = attendance.FirstOrDefault(a => a.UserId == s.UserId);
+
+                return new AttendanceStudentDto
+                {
+                    StudentId = s.StudentId,
+                    UserId = (int)s.UserId,
+                    RollNo = (int)s.RollNo,
+                    AdmissionNo = s.AdmissionNo!,
+                    FullName = s.FullName,
+                    Status = att?.Status ?? "Absent",
+                    IsEditable = true
+                };
+            }).ToList();
+
+            return new AttendanceFetchResponse
+            {
+                AttendanceDate = date,
+                SchoolId = schoolId,
+                ClassId = classId,
+                SectionId = sectionId,
+                Students = result
+            };
+        }
+
+        public async Task SaveAttendanceAsync(AttendanceMarkRequest req)
+        {
+            var leaveUserIds = await _context.Leaves
+                .Where(l =>
+                    l.SchoolId == req.SchoolId &&
+                    l.Status == "Approved" &&
+                    req.AttendanceDate >= l.FromDate &&
+                    req.AttendanceDate <= l.ToDate)
+                .Select(l => l.UserId)
+                .ToListAsync();
+
+            foreach (var record in req.Records)
+            {
+                // 🔒 Leave override safety
+                if (leaveUserIds.Contains(record.UserId))
+                    continue;
+
+                var existing = await _context.Attendances.FirstOrDefaultAsync(a =>
+                    a.SchoolId == req.SchoolId &&
+                    a.UserId == record.UserId &&
+                    a.AttendanceDate == req.AttendanceDate);
+
+                if (existing != null)
+                {
+                    existing.Status = record.Status;
+                    existing.Source = "Teacher";
+                }
+                else
+                {
+                    _context.Attendances.Add(new Attendance
+                    {
+                        SchoolId = req.SchoolId,
+                        UserId = record.UserId,
+                        AttendanceDate = req.AttendanceDate,
+                        Status = record.Status,
+                        Source = "Teacher"
+                    });
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+    } 
 }
+

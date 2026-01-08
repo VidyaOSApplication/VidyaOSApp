@@ -113,5 +113,136 @@ namespace VidyaOSServices.Services
             }
         }
 
+        public async Task<AttendanceViewResponse> ViewAttendanceAsync(
+            int schoolId,
+            int classId,
+            int sectionId,
+            DateOnly date)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            // 🚫 Future date safeguard
+            //if (date > today)
+            //{
+            //    return new AttendanceViewResponse
+            //    {
+            //        AttendanceDate = date,
+            //        AttendanceTaken = false,
+            //        Summary = new AttendanceSummary(),
+            //        Students = new List<AttendanceViewStudentDto>()
+            //    };
+            //}
+
+            // 1️⃣ Students of class + section
+            var students = await _context.Students
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.ClassId == classId &&
+                    s.SectionId == sectionId &&
+                    s.IsActive == true)
+                .OrderBy(s => s.RollNo)
+                .Select(s => new
+                {
+                    s.UserId,
+                    s.RollNo,
+                    s.AdmissionNo,
+                    FullName = s.FirstName + " " + s.LastName
+                })
+                .ToListAsync();
+
+            if (!students.Any())
+            {
+                return new AttendanceViewResponse
+                {
+                    AttendanceDate = date,
+                    AttendanceTaken = false
+                };
+            }
+
+            var userIds = students.Select(s => s.UserId).ToList();
+
+            // 2️⃣ Approved leave for date
+            var leaveUserIds = await _context.Leaves
+                .Where(l =>
+                    l.SchoolId == schoolId &&
+                    l.Status == "Approved" &&
+                    date >= l.FromDate &&
+                    date <= l.ToDate)
+                .Select(l => l.UserId)
+                .ToListAsync();
+
+            // 3️⃣ Attendance only for these students
+            var attendance = await _context.Attendances
+                .Where(a =>
+                    a.SchoolId == schoolId &&
+                    a.AttendanceDate == date &&
+                    userIds.Contains(a.UserId))
+                .ToListAsync();
+
+            bool attendanceTaken = attendance.Any();
+
+            int present = 0, absent = 0, leave = 0, notMarked = 0;
+
+            var result = students.Select(s =>
+            {
+                // 🏖️ Leave overrides everything
+                if (leaveUserIds.Contains(s.UserId))
+                {
+                    leave++;
+                    return new AttendanceViewStudentDto
+                    {
+                        RollNo = (int)s.RollNo,
+                        AdmissionNo = s.AdmissionNo!,
+                        FullName = s.FullName,
+                        Status = "Leave"
+                    };
+                }
+
+                var att = attendance.FirstOrDefault(a => a.UserId == s.UserId);
+
+                if (att == null)
+                {
+                    notMarked++;
+                    return new AttendanceViewStudentDto
+                    {
+                        RollNo = (int)s.RollNo,
+                        AdmissionNo = s.AdmissionNo!,
+                        FullName = s.FullName,
+                        Status = "NotMarked"
+                    };
+                }
+
+                if (att.Status == "Present")
+                    present++;
+                else
+                    absent++;
+
+                return new AttendanceViewStudentDto
+                {
+                    RollNo = (int)s.RollNo,
+                    AdmissionNo = s.AdmissionNo!,
+                    FullName = s.FullName,
+                    Status = att.Status!
+                };
+            }).ToList();
+
+            return new AttendanceViewResponse
+            {
+                AttendanceDate = date,
+                AttendanceTaken = attendanceTaken,
+                Summary = new AttendanceSummary
+                {
+                    Total = students.Count,
+                    Present = present,
+                    Absent = absent,
+                    Leave = leave,
+                    NotMarked = notMarked
+                },
+                Students = result
+            };
+        }
     }
+
 }
+
+
