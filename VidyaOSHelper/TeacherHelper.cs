@@ -29,7 +29,7 @@ namespace VidyaOSHelper
                 ? $"{parts[0]}.{parts[^1]}"
                 : parts[0];
 
-            var username = baseUsername;
+            var username = baseUsername.ToLower();
             int counter = 1;
 
             while (await _context.Users.AnyAsync(u => u.Username == username))
@@ -38,7 +38,7 @@ namespace VidyaOSHelper
                 counter++;
             }
 
-            return username;
+            return username.ToLower();
         }
 
         // ---------- PASSWORD GENERATOR ----------

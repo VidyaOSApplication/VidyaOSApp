@@ -199,7 +199,7 @@ namespace VidyaOSServices.Services
                 counter++;
             }
 
-            return username;
+            return username.ToLower();
         }
 
 
@@ -262,7 +262,7 @@ namespace VidyaOSServices.Services
                 var adminUser = new User
                 {
                     SchoolId = school.SchoolId, // 🔥 RELATION
-                    Username = req.AdminUsername.Trim(),
+                    Username = req.AdminUsername.Trim().ToLower(),
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.AdminPassword),
                     Role = "SchoolAdmin",
                     Email = req.Email,
