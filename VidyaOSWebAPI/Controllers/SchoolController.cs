@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VidyaOSDAL.DTOs;
 using VidyaOSServices.Services;
@@ -16,61 +17,29 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> RegisterSchool(RegisterSchoolRequest request)
+        public async Task<IActionResult> RegisterSchool(
+        VidyaOSDAL.DTOs.RegisterSchoolRequest request)
         {
-            try
-            {
-                await _schoolService.RegisterSchoolAsync(request);
+            var result = await _schoolService.RegisterSchoolAsync(request);
 
-                return Ok(new
-                {
-                    success = true,
-                    message = "School registered successfully"
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
+            if (!result.Success)
+                return BadRequest(result);
+
+            return Ok(result);
         }
 
-
-        [HttpPost]
-        public async Task<IActionResult> RegisterStudent(StudentRegisterRequest request)
+        [HttpGet]
+        [Authorize(Roles = "Teacher,SchoolAdmin")]
+        public async Task<IActionResult> ViewAttendance(
+            [FromQuery] int schoolId,
+            [FromQuery] int classId,
+            [FromQuery] int sectionId,
+            [FromQuery] DateOnly date)
         {
-            try
-            {
-                var result = await _schoolService.RegisterStudentAsync(request);
+            var result = await _schoolService.ViewAttendanceAsync(
+                schoolId, classId, sectionId, date);
 
-                return Ok(new
-                {
-                    success = true,
-                    message = "Student registered successfully",
-                    data = result
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                // 🚫 Business conflict
-                return Conflict(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (Exception)
-            {
-                // 🔥 Unexpected error
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "Something went wrong while registering student."
-                });
-            }
+            return Ok(result);
         }
-        }
+    }
     }
