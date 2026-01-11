@@ -242,8 +242,119 @@ namespace VidyaOSServices.Services
                 Students = result
             };
         }
-    }
+        public async Task<ApiResult<LeaveResponse>> ApplyLeaveAsync(
+    ApplyLeaveRequest req)
+        {
+            if (req == null)
+                return ApiResult<LeaveResponse>.Fail("Request is required.");
 
+            if (req.FromDate.Date > req.ToDate.Date)
+                return ApiResult<LeaveResponse>.Fail(
+                    "From date cannot be greater than To date."
+                );
+
+            var fromDate = DateOnly.FromDateTime(req.FromDate);
+            var toDate = DateOnly.FromDateTime(req.ToDate);
+
+            bool isUpdated = false;
+
+            // 🔍 Check overlapping leave
+            var existingLeave = await _context.Leaves
+                .FirstOrDefaultAsync(l =>
+                    l.SchoolId == req.SchoolId &&
+                    l.UserId == req.StudentId &&
+                    l.FromDate <= toDate &&
+                    l.ToDate >= fromDate
+                );
+
+            LeaveRequest targetLeave;
+
+            if (existingLeave != null)
+            {
+                // 🔁 UPDATE
+                existingLeave.FromDate = fromDate;
+                existingLeave.ToDate = toDate;
+                existingLeave.Reason = req.Reason;
+                existingLeave.Status = "Pending";
+                existingLeave.AppliedOn = DateOnly.FromDateTime(DateTime.UtcNow);
+
+                targetLeave = existingLeave;
+                isUpdated = true;
+            }
+            else
+            {
+                // ➕ CREATE
+                targetLeave = new LeaveRequest
+                {
+                    SchoolId = req.SchoolId,
+                    UserId = req.StudentId,
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    Reason = req.Reason,
+                    Status = "Pending",
+                    AppliedOn = DateOnly.FromDateTime(DateTime.UtcNow)
+                };
+
+                _context.Leaves.Add(targetLeave);
+            }
+
+            await _context.SaveChangesAsync();
+
+            return ApiResult<LeaveResponse>.Ok(
+                new LeaveResponse
+                {
+                    LeaveId = targetLeave.LeaveId,
+                    Status = targetLeave.Status!,
+                    AppliedAt = DateOnly.FromDateTime(DateTime.UtcNow)
+                },
+                isUpdated
+                    ? "Leave updated successfully."
+                    : "Leave applied successfully."
+            );
+        }
+
+
+        // ADMIN: GET PENDING LEAVES
+        public async Task<ApiResult<List<LeaveRequest>>> GetPendingLeavesAsync(int schoolId)
+        {
+            var leaves = await _context.Leaves
+                .Where(l => l.SchoolId == schoolId && l.Status == "Pending")
+                .OrderByDescending(l => l.AppliedOn)
+                .ToListAsync();
+
+            return ApiResult<List<LeaveRequest>>.Ok(leaves);
+        }
+
+        // ADMIN: APPROVE / REJECT LEAVE
+        public async Task<ApiResult<string>> UpdateLeaveStatusAsync(
+            int leaveId,
+            string status,
+            int adminUserId,
+            string? remarks)
+        {
+            if (status != "Approved" && status != "Rejected")
+                return ApiResult<string>.Fail("Invalid status.");
+
+            var leave = await _context.Leaves
+                .FirstOrDefaultAsync(l => l.LeaveId == leaveId);
+
+            if (leave == null)
+                return ApiResult<string>.Fail("Leave not found.");
+
+            leave.Status = status;
+            leave.ApprovedBy = adminUserId;
+            leave.ApprovedOn = DateOnly.FromDateTime(DateTime.UtcNow);
+            await _context.SaveChangesAsync();
+
+            return ApiResult<string>.Ok(
+                status,
+                $"Leave {status.ToLower()} successfully."
+            );
+        }
+    }
 }
+
+
+
 
 

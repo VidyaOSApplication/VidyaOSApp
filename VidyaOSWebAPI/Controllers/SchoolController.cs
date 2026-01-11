@@ -41,5 +41,40 @@ namespace VidyaOSWebAPI.Controllers
 
             return Ok(result);
         }
+        [HttpPost]
+        public async Task<IActionResult> ApplyLeave(ApplyLeaveRequest request)
+        {
+            var result = await _schoolService.ApplyLeaveAsync(request);
+
+            if (!result.Success)
+                return BadRequest(result);
+
+            return Ok(result);
+        }
+
+        // ADMIN
+        [HttpGet]
+        public async Task<IActionResult> GetPendingLeaves(int schoolId)
+        {
+            var result = await _schoolService.GetPendingLeavesAsync(schoolId);
+            return Ok(result);
+        }
+
+        // ADMIN
+        [HttpPost]
+        public async Task<IActionResult> UpdateLeaveStatus(
+            int leaveId,
+            string status,
+            int adminUserId,
+            string? remarks)
+        {
+            var result = await _schoolService.UpdateLeaveStatusAsync(
+                leaveId, status, adminUserId, remarks);
+
+            if (!result.Success)
+                return BadRequest(result);
+
+            return Ok(result);
+        }
     }
     }
