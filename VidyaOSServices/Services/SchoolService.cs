@@ -154,8 +154,9 @@ namespace VidyaOSServices.Services
             {
                 return new AttendanceViewResponse
                 {
-                    AttendanceDate = date,
-                    AttendanceTaken = false
+                    Success = false,
+                    Message = "No students found for selected class and section",
+                    AttendanceDate = date
                 };
             }
 

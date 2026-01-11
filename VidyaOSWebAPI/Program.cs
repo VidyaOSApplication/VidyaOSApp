@@ -82,7 +82,7 @@ namespace VidyaOSWebAPI
             app.UseRouting();
             app.UseCors("AllowIonicApp");
 
-
+            app.UseMiddleware<GlobalExceptionMiddleware>();
             app.UseAuthorization();
 
 
