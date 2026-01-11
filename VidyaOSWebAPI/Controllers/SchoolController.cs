@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VidyaOSDAL.DTOs;
 using VidyaOSServices.Services;
@@ -16,17 +17,6 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> RegisterStudent(
-        StudentRegisterRequest request)
-        {
-            var result = await _schoolService.RegisterStudentAsync(request);
-
-            if (!result.Success)
-                return BadRequest(result);
-
-            return Ok(result); // ✅ NO extra wrapping
-        }
-        [HttpPost]
         public async Task<IActionResult> RegisterSchool(
         VidyaOSDAL.DTOs.RegisterSchoolRequest request)
         {
@@ -34,6 +24,20 @@ namespace VidyaOSWebAPI.Controllers
 
             if (!result.Success)
                 return BadRequest(result);
+
+            return Ok(result);
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Teacher,SchoolAdmin")]
+        public async Task<IActionResult> ViewAttendance(
+            [FromQuery] int schoolId,
+            [FromQuery] int classId,
+            [FromQuery] int sectionId,
+            [FromQuery] DateOnly date)
+        {
+            var result = await _schoolService.ViewAttendanceAsync(
+                schoolId, classId, sectionId, date);
 
             return Ok(result);
         }

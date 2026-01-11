@@ -19,6 +19,20 @@ namespace VidyaOSWebAPI
             // Add services to the container.
 
             builder.Services.AddControllers();
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowIonicApp", policy =>
+                {
+                    policy
+                        .WithOrigins(
+                            "http://localhost:8100",   // Ionic dev
+                            "http://localhost:4200"    // Angular (optional)
+                        )
+                        .AllowAnyHeader()
+                        .AllowAnyMethod()
+                        .AllowCredentials();
+                });
+            });
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
@@ -35,6 +49,7 @@ namespace VidyaOSWebAPI
             builder.Services.AddScoped<AuthHelper>();
             builder.Services.AddScoped<AuthService>();
             builder.Services.AddScoped<CommonService>();
+            builder.Services.AddScoped<StudentHelper>();
             builder.Services.AddScoped<VidyaOSHelper.SchoolHelper.SchoolHelper>();
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -64,7 +79,10 @@ namespace VidyaOSWebAPI
             }
 
             app.UseHttpsRedirection();
+            app.UseRouting();
+            app.UseCors("AllowIonicApp");
 
+            app.UseMiddleware<GlobalExceptionMiddleware>();
             app.UseAuthorization();
 
 

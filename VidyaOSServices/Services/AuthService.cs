@@ -24,9 +24,12 @@ namespace VidyaOSServices.Services
 
         public async Task<ApiResult<LoginResponse>> LoginAsync(LoginRequest req)
         {
+            string normalizedUsername = req.Username.Trim().ToLower();
+
             var user = await _context.Users
                 .FirstOrDefaultAsync(u =>
-                    u.Username == req.Username && u.IsActive == true);
+                    u.Username == normalizedUsername &&
+                    u.IsActive == true);
 
             if (user == null)
                 return ApiResult<LoginResponse>.Fail("Invalid username or password.");

@@ -22,190 +22,6 @@ namespace VidyaOSServices.Services
             _context = context;
             _schoolHelper = schoolHelper;
         }
-        public async Task<ApiResult<StudentRegisterResponse>> RegisterStudentAsync(
-    StudentRegisterRequest req)
-        {
-            // ---------- Validation ----------
-            if (req == null)
-                return ApiResult<StudentRegisterResponse>.Fail("Request cannot be null.");
-
-            if (req.SchoolId <= 0)
-                return ApiResult<StudentRegisterResponse>.Fail("Invalid school.");
-
-            if (string.IsNullOrWhiteSpace(req.FirstName))
-                return ApiResult<StudentRegisterResponse>.Fail("First name is required.");
-
-            if (req.DOB == default)
-                return ApiResult<StudentRegisterResponse>.Fail("Date of birth is required.");
-
-            // ---------- DOB & AGE VALIDATION ----------
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var dob = DateOnly.FromDateTime(req.DOB);
-
-            if (dob > today)
-                return ApiResult<StudentRegisterResponse>
-                    .Fail("Date of birth cannot be in the future.");
-
-            int age = today.Year - dob.Year;
-            if (dob > today.AddYears(-age))
-                age--;
-
-            if (age < 3)
-                return ApiResult<StudentRegisterResponse>
-                    .Fail("Student should not be less than 3 years old.");
-
-            if (req.ClassId <= 0 || req.SectionId <= 0)
-                return ApiResult<StudentRegisterResponse>.Fail("Class and section are required.");
-
-            if (string.IsNullOrWhiteSpace(req.AcademicYear))
-                return ApiResult<StudentRegisterResponse>.Fail("Academic year is required.");
-
-            if (string.IsNullOrWhiteSpace(req.ParentPhone))
-                return ApiResult<StudentRegisterResponse>.Fail("Parent phone is required.");
-
-            if (!System.Text.RegularExpressions.Regex.IsMatch(
-                req.ParentPhone.Trim(), @"^[6-9]\d{9}$"))
-            {
-                return ApiResult<StudentRegisterResponse>
-                    .Fail("Invalid parent phone number.");
-            }
-
-            // ---------- Duplicate Check ----------
-            bool exists = await _context.Students.AnyAsync(s =>
-                s.SchoolId == req.SchoolId &&
-                s.AcademicYear == req.AcademicYear &&
-                s.FirstName!.ToLower() == req.FirstName.ToLower() &&
-                s.Dob == DateOnly.FromDateTime(req.DOB) &&
-                s.ParentPhone == req.ParentPhone
-            );
-
-            if (exists)
-            {
-                return ApiResult<StudentRegisterResponse>.Fail(
-                    "Student already exists with same name, date of birth and parent mobile number."
-                );
-            }
-
-            using var tx = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                // ---------- School ----------
-                var school = await _context.Schools
-                    .FirstOrDefaultAsync(s => s.SchoolId == req.SchoolId);
-
-                if (school == null)
-                    return ApiResult<StudentRegisterResponse>.Fail("School not found.");
-
-                // ---------- Admission No ----------
-                int admissionYear = int.Parse(req.AcademicYear);
-
-                string admissionNo = await _schoolHelper.GenerateAdmissionNoAsync(
-                    req.SchoolId,
-                    admissionYear,
-                    school.SchoolCode!
-                );
-
-                // ---------- Roll No ----------
-                int rollNo = await _schoolHelper.GenerateRollNoAsync(req.SectionId);
-
-                // ---------- USERNAME (AUTO FROM NAME) ----------
-                string username = await GenerateStudentUsernameAsync(
-                    req.FirstName, req.LastName);
-
-                // ---------- PASSWORD (FirstName + BirthYear) ----------
-                string tempPassword = $"{req.FirstName}{req.DOB.Year}";
-                string passwordHash = BCrypt.Net.BCrypt.HashPassword(tempPassword);
-
-                // ---------- User ----------
-                var user = new User
-                {
-                    SchoolId = req.SchoolId,
-                    Username = username,
-                    PasswordHash = passwordHash,
-                    Role = "Student",
-                    Email = req.Email,
-                    Phone = req.ParentPhone,
-                    IsFirstLogin = true,     // 🔥 force change
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                _context.Users.Add(user);
-                await _context.SaveChangesAsync();
-
-                // ---------- Student ----------
-                var student = new Student
-                {
-                    SchoolId = req.SchoolId,
-                    UserId = user.UserId,           // 🔥 RELATION
-                    AdmissionNo = admissionNo,
-                    RollNo = rollNo,
-                    FirstName = req.FirstName,
-                    LastName = req.LastName,
-                    Gender = req.Gender,
-                    Dob = DateOnly.FromDateTime(req.DOB),
-                    ClassId = req.ClassId,
-                    SectionId = req.SectionId,
-                    AcademicYear = req.AcademicYear,
-                    AdmissionDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                    FatherName = req.FatherName,
-                    MotherName = req.MotherName,
-                    ParentPhone = req.ParentPhone,
-                    AddressLine1 = req.AddressLine1,
-                    City = req.City,
-                    State = req.State,
-                    StudentStatus = "Active",
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                _context.Students.Add(student);
-                await _context.SaveChangesAsync();
-
-                await tx.CommitAsync();
-
-                return ApiResult<StudentRegisterResponse>.Ok(
-                    new StudentRegisterResponse
-                    {
-                        StudentId = student.StudentId,
-                        AdmissionNo = admissionNo,
-                        Username = username,
-                        TempPassword = tempPassword
-                    },
-                    "Student registered successfully."
-                );
-            }
-            catch
-            {
-                await tx.RollbackAsync();
-                throw;
-            }
-        }
-
-        private async Task<string> GenerateStudentUsernameAsync(
-    string firstName, string? lastName)
-        {
-            var baseUsername = string.IsNullOrWhiteSpace(lastName)
-                ? firstName.ToLower()
-                : $"{firstName.ToLower()}.{lastName.ToLower()}";
-
-            var username = baseUsername;
-            int counter = 1;
-
-            while (await _context.Users.AnyAsync(u => u.Username == username))
-            {
-                username = $"{baseUsername}{counter}";
-                counter++;
-            }
-
-            return username;
-        }
-
-
-
-
-
         public async Task<ApiResult<RegisterSchoolResponse>> RegisterSchoolAsync(
     RegisterSchoolRequest req)
         {
@@ -262,7 +78,7 @@ namespace VidyaOSServices.Services
                 var adminUser = new User
                 {
                     SchoolId = school.SchoolId, // 🔥 RELATION
-                    Username = req.AdminUsername.Trim(),
+                    Username = req.AdminUsername.Trim().ToLower(),
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.AdminPassword),
                     Role = "SchoolAdmin",
                     Email = req.Email,
@@ -297,5 +113,137 @@ namespace VidyaOSServices.Services
             }
         }
 
+        public async Task<AttendanceViewResponse> ViewAttendanceAsync(
+            int schoolId,
+            int classId,
+            int sectionId,
+            DateOnly date)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            // 🚫 Future date safeguard
+            //if (date > today)
+            //{
+            //    return new AttendanceViewResponse
+            //    {
+            //        AttendanceDate = date,
+            //        AttendanceTaken = false,
+            //        Summary = new AttendanceSummary(),
+            //        Students = new List<AttendanceViewStudentDto>()
+            //    };
+            //}
+
+            // 1️⃣ Students of class + section
+            var students = await _context.Students
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.ClassId == classId &&
+                    s.SectionId == sectionId &&
+                    s.IsActive == true)
+                .OrderBy(s => s.RollNo)
+                .Select(s => new
+                {
+                    s.UserId,
+                    s.RollNo,
+                    s.AdmissionNo,
+                    FullName = s.FirstName + " " + s.LastName
+                })
+                .ToListAsync();
+
+            if (!students.Any())
+            {
+                return new AttendanceViewResponse
+                {
+                    Success = false,
+                    Message = "No students found for selected class and section",
+                    AttendanceDate = date
+                };
+            }
+
+            var userIds = students.Select(s => s.UserId).ToList();
+
+            // 2️⃣ Approved leave for date
+            var leaveUserIds = await _context.Leaves
+                .Where(l =>
+                    l.SchoolId == schoolId &&
+                    l.Status == "Approved" &&
+                    date >= l.FromDate &&
+                    date <= l.ToDate)
+                .Select(l => l.UserId)
+                .ToListAsync();
+
+            // 3️⃣ Attendance only for these students
+            var attendance = await _context.Attendances
+                .Where(a =>
+                    a.SchoolId == schoolId &&
+                    a.AttendanceDate == date &&
+                    userIds.Contains(a.UserId))
+                .ToListAsync();
+
+            bool attendanceTaken = attendance.Any();
+
+            int present = 0, absent = 0, leave = 0, notMarked = 0;
+
+            var result = students.Select(s =>
+            {
+                // 🏖️ Leave overrides everything
+                if (leaveUserIds.Contains(s.UserId))
+                {
+                    leave++;
+                    return new AttendanceViewStudentDto
+                    {
+                        RollNo = (int)s.RollNo,
+                        AdmissionNo = s.AdmissionNo!,
+                        FullName = s.FullName,
+                        Status = "Leave"
+                    };
+                }
+
+                var att = attendance.FirstOrDefault(a => a.UserId == s.UserId);
+
+                if (att == null)
+                {
+                    notMarked++;
+                    return new AttendanceViewStudentDto
+                    {
+                        RollNo = (int)s.RollNo,
+                        AdmissionNo = s.AdmissionNo!,
+                        FullName = s.FullName,
+                        Status = "NotMarked"
+                    };
+                }
+
+                if (att.Status == "Present")
+                    present++;
+                else
+                    absent++;
+
+                return new AttendanceViewStudentDto
+                {
+                    RollNo = (int)s.RollNo,
+                    AdmissionNo = s.AdmissionNo!,
+                    FullName = s.FullName,
+                    Status = att.Status!
+                };
+            }).ToList();
+
+            return new AttendanceViewResponse
+            {
+                AttendanceDate = date,
+                AttendanceTaken = attendanceTaken,
+                Summary = new AttendanceSummary
+                {
+                    Total = students.Count,
+                    Present = present,
+                    Absent = absent,
+                    Leave = leave,
+                    NotMarked = notMarked
+                },
+                Students = result
+            };
+        }
     }
+
 }
+
+

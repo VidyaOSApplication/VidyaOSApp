@@ -32,7 +32,7 @@ public partial class VidyaOsContext : DbContext
 
     public virtual DbSet<Homework> Homeworks { get; set; }
 
-    public virtual DbSet<Leaf> Leaves { get; set; }
+    public virtual DbSet<LeaveRequest> Leaves { get; set; }
 
     public virtual DbSet<LibraryBook> LibraryBooks { get; set; }
 
@@ -145,7 +145,7 @@ public partial class VidyaOsContext : DbContext
             entity.Property(e => e.Title).HasMaxLength(100);
         });
 
-        modelBuilder.Entity<Leaf>(entity =>
+        modelBuilder.Entity<LeaveRequest>(entity =>
         {
             entity.HasKey(e => e.LeaveId).HasName("PK__Leaves__796DB959AF67D1E5");
 
