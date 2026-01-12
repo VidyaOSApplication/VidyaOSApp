@@ -79,7 +79,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
         [HttpPost]
-        [Authorize(Roles = "SchoolAdmin")]
+        //[Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> TakeLeaveAction(
     LeaveActionRequest request)
         {
@@ -89,6 +89,63 @@ namespace VidyaOSWebAPI.Controllers
                 ? Ok(result)
                 : BadRequest(result);
         }
+        [HttpPost]
+        //[Authorize(Roles = "SchoolAdmin")]
+        public async Task<IActionResult> SaveFeeStructure(
+                                                        FeeStructureRequest request)
+        {
+            var result = await _schoolService.SaveFeeStructureAsync(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+        [HttpGet]
+        //[Authorize(Roles = "SchoolAdmin")]
+        public async Task<IActionResult> GetFeeStructures(int schoolId)
+        {
+            var result = await _schoolService.GetFeeStructuresAsync(schoolId);
+            return Ok(result);
+        }
+        [HttpPost("generate-monthly")]
+        public async Task<IActionResult> GenerateMonthlyFee(
+            GenerateMonthlyFeeRequest request)
+        {
+            var result = await _schoolService.GenerateMonthlyFeeAsync(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        // 4️⃣ Get Pending Fees (Admin Dashboard)
+        [HttpGet("pending/{schoolId}")]
+        public async Task<IActionResult> GetPendingFees(int schoolId)
+        {
+            var result = await _schoolService.GetPendingFeesAsync(schoolId);
+            return Ok(result);
+        }
+
+        // 5️⃣ Collect / Pay Fee
+        [HttpPost("collect")]
+        public async Task<IActionResult> CollectFee(
+            CollectFeeRequest request)
+        {
+            var result = await _schoolService.CollectFeeAsync(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        // 6️⃣ Student Fee History
+        [HttpGet("student/{studentId}")]
+        public async Task<IActionResult> GetStudentFeeHistory(int studentId)
+        {
+            var result = await _schoolService.GetStudentFeeHistoryAsync(studentId);
+            return Ok(result);
+        }
+        [HttpGet]
+        public async Task<IActionResult> GetFeeReceipt(
+                    int studentId, string feeMonth)
+        {
+            var result = await _schoolService.GenerateFeeReceiptAsync(studentId, feeMonth);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+
+
 
     }
 }

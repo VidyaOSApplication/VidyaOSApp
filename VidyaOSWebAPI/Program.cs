@@ -1,11 +1,10 @@
-
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using VidyaOSDAL.Models;
 using VidyaOSHelper;
 using VidyaOSServices.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
 
 
 namespace VidyaOSWebAPI
@@ -37,9 +36,8 @@ namespace VidyaOSWebAPI
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
             builder.Services.AddDbContext<VidyaOsContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-    ));
+    options.UseSqlServer());
+       
             builder.Services.AddScoped<StudentService>();
             builder.Services.AddScoped<SchoolService>();
             builder.Services.AddScoped<TeacherService>();
