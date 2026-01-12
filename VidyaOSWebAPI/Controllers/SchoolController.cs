@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VidyaOSDAL.DTOs;
+using VidyaOSDAL.Models;
 using VidyaOSServices.Services;
 
 namespace VidyaOSWebAPI.Controllers
@@ -77,5 +78,17 @@ namespace VidyaOSWebAPI.Controllers
 
             return Ok(result);
         }
+        [HttpPost]
+        [Authorize(Roles = "SchoolAdmin")]
+        public async Task<IActionResult> TakeLeaveAction(
+    LeaveActionRequest request)
+        {
+            var result = await _schoolService.TakeLeaveActionAsync(request);
+
+            return result.Success
+                ? Ok(result)
+                : BadRequest(result);
+        }
+
     }
-    }
+}

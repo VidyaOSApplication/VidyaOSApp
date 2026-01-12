@@ -403,6 +403,38 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<PendingLeaveDto>>.Ok(response);
         }
+        public async Task<ApiResult<string>> TakeLeaveActionAsync(
+    LeaveActionRequest req)
+        {
+            if (req == null)
+                return ApiResult<string>.Fail("Request is required.");
+
+            if (req.Action != "Approved" && req.Action != "Rejected")
+                return ApiResult<string>.Fail("Invalid action.");
+
+            var leave = await _context.Leaves
+                .FirstOrDefaultAsync(l => l.LeaveId == req.LeaveId);
+
+            if (leave == null)
+                return ApiResult<string>.Fail("Leave request not found.");
+
+            if (leave.Status != "Pending")
+                return ApiResult<string>.Fail(
+                    $"Leave already {leave.Status?.ToLower()}."
+                );
+
+            leave.Status = req.Action;
+            leave.ApprovedBy = req.AdminUserId;
+            leave.ApprovedOn = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            await _context.SaveChangesAsync();
+
+            return ApiResult<string>.Ok(
+                req.Action,
+                $"Leave {req.Action.ToLower()} successfully."
+            );
+        }
+
 
     }
 }
