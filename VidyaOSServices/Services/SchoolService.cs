@@ -313,18 +313,6 @@ namespace VidyaOSServices.Services
             );
         }
 
-
-        // ADMIN: GET PENDING LEAVES
-        public async Task<ApiResult<List<LeaveRequest>>> GetPendingLeavesAsync(int schoolId)
-        {
-            var leaves = await _context.Leaves
-                .Where(l => l.SchoolId == schoolId && l.Status == "Pending")
-                .OrderByDescending(l => l.AppliedOn)
-                .ToListAsync();
-
-            return ApiResult<List<LeaveRequest>>.Ok(leaves);
-        }
-
         // ADMIN: APPROVE / REJECT LEAVE
         public async Task<ApiResult<string>> UpdateLeaveStatusAsync(
             int leaveId,
@@ -351,6 +339,71 @@ namespace VidyaOSServices.Services
                 $"Leave {status.ToLower()} successfully."
             );
         }
+      
+        public async Task<ApiResult<List<PendingLeaveDto>>> GetPendingLeavesAsync(int schoolId)
+        {
+            var result = await (
+                from l in _context.Leaves
+                join u in _context.Users on l.UserId equals u.UserId
+                where l.SchoolId == schoolId && l.Status == "Pending"
+                select new { l, u }
+            ).ToListAsync();
+
+            var response = new List<PendingLeaveDto>();
+
+            foreach (var item in result)
+            {
+                string name = "";
+                int? classId = null;
+                int? sectionId = null;
+
+                if (item.u.Role == "Student")
+                {
+                    var student = await (
+                        from s in _context.Students
+                        where s.UserId == item.u.UserId
+                        select new
+                        {
+                            Name = s.FirstName + " " + s.LastName,
+                            classId = s.ClassId,
+                            sectionId = s.SectionId
+                        }
+                    ).FirstOrDefaultAsync();
+
+                    if (student != null)
+                    {
+                        name = student.Name;
+                        classId = student.classId;
+                        sectionId = student.sectionId;
+                    }
+                }
+                else if (item.u.Role == "Teacher")
+                {
+                    name = await _context.Teachers
+                        .Where(t => t.UserId == item.u.UserId)
+                        .Select(t => t.FullName)
+                        .FirstOrDefaultAsync() ?? "Teacher";
+                }
+
+                response.Add(new PendingLeaveDto
+                {
+                    LeaveId = item.l.LeaveId,
+                    UserId = item.u.UserId,
+                    Role = item.u.Role!,
+                    Name = name,
+                    ClassId = classId,
+                    SectionId = sectionId,
+                    FromDate = (DateOnly)item.l.FromDate,
+                    ToDate = (DateOnly)item.l.ToDate,
+                    Reason = item.l.Reason ?? "",
+                    Status = item.l.Status!,
+                    AppliedOn = item.l.AppliedOn!.Value
+                });
+            }
+
+            return ApiResult<List<PendingLeaveDto>>.Ok(response);
+        }
+
     }
 }
 

@@ -54,6 +54,7 @@ namespace VidyaOSWebAPI.Controllers
 
         // ADMIN
         [HttpGet]
+        [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> GetPendingLeaves(int schoolId)
         {
             var result = await _schoolService.GetPendingLeavesAsync(schoolId);
