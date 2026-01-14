@@ -27,10 +27,11 @@ namespace VidyaOSHelper
                 throw new Exception("UserId is null");
 
             var claims = new List<Claim>
-            {
-                new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
-                new Claim(ClaimTypes.Role, user.Role ?? "")
-            };
+                {
+                    new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()), // 🔥 REQUIRED
+                    new Claim(ClaimTypes.Role, user.Role ?? ""),                  // 🔥 Role auth
+                    new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString())
+                };
 
             // ✅ Add SchoolId ONLY if present
             if (user.SchoolId.HasValue)

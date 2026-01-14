@@ -30,15 +30,15 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Teacher,SchoolAdmin")]
+        //[Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> ViewAttendance(
             [FromQuery] int schoolId,
             [FromQuery] int classId,
             [FromQuery] int sectionId,
-            [FromQuery] DateOnly date)
+            [FromQuery] DateTime date)
         {
             var result = await _schoolService.ViewAttendanceAsync(
-                schoolId, classId, sectionId, date);
+                schoolId, classId, sectionId, DateOnly.FromDateTime(date));
 
             return Ok(result);
         }
@@ -79,7 +79,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
         [HttpPost]
-        //[Authorize(Roles = "SchoolAdmin")]
+        [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> TakeLeaveAction(
     LeaveActionRequest request)
         {
@@ -90,7 +90,7 @@ namespace VidyaOSWebAPI.Controllers
                 : BadRequest(result);
         }
         [HttpPost]
-        //[Authorize(Roles = "SchoolAdmin")]
+        [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> SaveFeeStructure(
                                                         FeeStructureRequest request)
         {
@@ -98,13 +98,14 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
         [HttpGet]
-        //[Authorize(Roles = "SchoolAdmin")]
+        [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> GetFeeStructures(int schoolId)
         {
             var result = await _schoolService.GetFeeStructuresAsync(schoolId);
             return Ok(result);
         }
         [HttpPost]
+        [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> GenerateMonthlyFee(
             GenerateMonthlyFeeRequest request)
         {
@@ -114,6 +115,7 @@ namespace VidyaOSWebAPI.Controllers
 
         // 4️⃣ Get Pending Fees (Admin Dashboard)
         [HttpGet]
+        [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> GetPendingFees(int schoolId)
         {
             var result = await _schoolService.GetPendingFeesAsync(schoolId);
@@ -147,7 +149,7 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
         [HttpGet]
-        //[Authorize(Roles = "SchoolAdmin")]
+        [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> GetStudentsByClassSection(
             int schoolId,
             int classId,
