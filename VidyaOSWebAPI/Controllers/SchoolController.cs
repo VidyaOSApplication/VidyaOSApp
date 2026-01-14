@@ -104,7 +104,7 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GetFeeStructuresAsync(schoolId);
             return Ok(result);
         }
-        [HttpPost("generate-monthly")]
+        [HttpPost]
         public async Task<IActionResult> GenerateMonthlyFee(
             GenerateMonthlyFeeRequest request)
         {
@@ -113,7 +113,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // 4️⃣ Get Pending Fees (Admin Dashboard)
-        [HttpGet("pending/{schoolId}")]
+        [HttpGet]
         public async Task<IActionResult> GetPendingFees(int schoolId)
         {
             var result = await _schoolService.GetPendingFeesAsync(schoolId);
@@ -121,16 +121,19 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // 5️⃣ Collect / Pay Fee
-        [HttpPost("collect")]
-        public async Task<IActionResult> CollectFee(
-            CollectFeeRequest request)
+        [HttpPost]
+        [Authorize(Roles = "SchoolAdmin")]
+        public async Task<IActionResult> CollectFees(CollectFeesRequest request)
         {
-            var result = await _schoolService.CollectFeeAsync(request);
-            return result.Success ? Ok(result) : BadRequest(result);
+            var result = await _schoolService.CollectFeesAsync(request);
+
+            return result.Success
+                ? Ok(result)
+                : BadRequest(result);
         }
 
         // 6️⃣ Student Fee History
-        [HttpGet("student/{studentId}")]
+        [HttpGet]
         public async Task<IActionResult> GetStudentFeeHistory(int studentId)
         {
             var result = await _schoolService.GetStudentFeeHistoryAsync(studentId);
@@ -143,9 +146,17 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GenerateFeeReceiptAsync(studentId, feeMonth);
             return result.Success ? Ok(result) : BadRequest(result);
         }
+        [HttpGet]
+        //[Authorize(Roles = "SchoolAdmin")]
+        public async Task<IActionResult> GetStudentsByClassSection(
+            int schoolId,
+            int classId,
+            int sectionId)
+        {
+            var result = await _schoolService.GetStudentsByClassSectionAsync(
+                schoolId, classId, sectionId);
 
-
-
-
+            return Ok(result);
+        }
     }
 }

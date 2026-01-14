@@ -521,28 +521,58 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<PendingFeeResponse>>.Ok(data);
         }
-        public async Task<ApiResult<object>> CollectFeeAsync(CollectFeeRequest req)
+        public async Task<ApiResult<CollectFeesResponse>> CollectFeesAsync(
+    CollectFeesRequest req)
         {
-            if (req.StudentId <= 0 || string.IsNullOrWhiteSpace(req.FeeMonth))
-                return ApiResult<object>.Fail("Invalid request.");
+            // ---------- VALIDATION ----------
+            if (req.StudentId <= 0 || req.SchoolId <= 0)
+                return ApiResult<CollectFeesResponse>.Fail("Invalid student or school.");
 
-            var fee = await _context.StudentFees.FirstOrDefaultAsync(f =>
-                f.StudentId == req.StudentId &&
-                f.FeeMonth == req.FeeMonth);
+            if (req.FeeMonths == null || !req.FeeMonths.Any())
+                return ApiResult<CollectFeesResponse>.Fail("Select at least one fee month.");
 
-            if (fee == null)
-                return ApiResult<object>.Fail("Fee record not found.");
+            // ---------- FETCH FEES ----------
+            var fees = await _context.StudentFees
+                .Where(f =>
+                    f.StudentId == req.StudentId &&
+                    req.FeeMonths.Contains(f.FeeMonth!) &&
+                    f.Status == "Pending")
+                .ToListAsync();
 
-            if (fee.Status == "Paid")
-                return ApiResult<object>.Fail("Fee already paid.");
+            if (!fees.Any())
+                return ApiResult<CollectFeesResponse>.Fail("No pending fees found.");
 
-            fee.Status = "Paid";
-            fee.PaymentMode = req.PaymentMode;
-            fee.PaidOn = DateOnly.FromDateTime(DateTime.UtcNow);
+            decimal totalAmount = fees.Sum(f => f.Amount ?? 0);
+
+            // ---------- MARK AS PAID ----------
+            foreach (var fee in fees)
+            {
+                fee.Status = "Paid";
+                fee.PaymentMode = req.PaymentMode;
+                fee.PaidOn = DateOnly.FromDateTime(DateTime.UtcNow);
+            }
 
             await _context.SaveChangesAsync();
 
-            return ApiResult<object>.Ok(null, "Fee collected successfully.");
+            // ---------- RECEIPT NO ----------
+            var school = await _context.Schools
+                .FirstAsync(s => s.SchoolId == req.SchoolId);
+
+            string receiptNo =
+                $"{school.SchoolCode}/{DateTime.UtcNow:yyyy}/{fees.First().StudentFeeId}";
+
+            // ---------- RESPONSE ----------
+            return ApiResult<CollectFeesResponse>.Ok(
+                new CollectFeesResponse
+                {
+                    ReceiptNo = receiptNo,
+                    StudentId = req.StudentId,
+                    PaidMonths = fees.Select(f => f.FeeMonth!).ToList(),
+                    TotalAmount = totalAmount,
+                    PaidOn = DateTime.UtcNow
+                },
+                "Fee collected successfully."
+            );
         }
 
         public async Task<ApiResult<FeeStructureResponse>> SaveFeeStructureAsync(
@@ -705,6 +735,30 @@ namespace VidyaOSServices.Services
                     PaymentMode = fee.PaymentMode ?? "Cash"
                 }
             );
+        }
+        public async Task<ApiResult<List<StudentListDto>>> GetStudentsByClassSectionAsync(
+    int schoolId,
+    int classId,
+    int sectionId)
+        {
+            var students = await _context.Students
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.ClassId == classId &&
+                    s.SectionId == sectionId &&
+                    s.IsActive == true
+                )
+                .OrderBy(s => s.RollNo)
+                .Select(s => new StudentListDto
+                {
+                    StudentId = s.StudentId,
+                    AdmissionNo = s.AdmissionNo!,
+                    FullName = s.FirstName + " " + s.LastName,
+                    RollNo = s.RollNo ?? 0
+                })
+                .ToListAsync();
+
+            return ApiResult<List<StudentListDto>>.Ok(students);
         }
 
 
