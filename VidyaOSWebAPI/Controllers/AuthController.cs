@@ -22,7 +22,10 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _authService.LoginAsync(request);
 
             if (!result.Success)
-                return Unauthorized(result);
+                return BadRequest(new
+                {
+                    message = result.Message
+                });
 
             return Ok(result);
         }

@@ -14,13 +14,17 @@ namespace VidyaOSDAL.DTOs
         public string Status { get; set; } = ""; // Present | Absent | Leave | NotMarked
     }
 
-    public class AttendanceViewResponse
-    {
-        public DateOnly AttendanceDate { get; set; }
-        public bool AttendanceTaken { get; set; }
+   
+        public class AttendanceViewResponse
+        {
+            public bool Success { get; set; }
+            public string? Message { get; set; }
 
-        public AttendanceSummary Summary { get; set; } = new();
-        public List<AttendanceViewStudentDto> Students { get; set; } = new();
+            public DateOnly AttendanceDate { get; set; }
+            public bool AttendanceTaken { get; set; }
+            public AttendanceSummary? Summary { get; set; }
+            public List<AttendanceViewStudentDto>? Students { get; set; }
+       
     }
 
     public class AttendanceSummary

@@ -112,7 +112,7 @@ namespace VidyaOSServices.Services
                     return ApiResult<StudentRegisterResponse>.Fail("School not found.");
 
                 // ---------- Admission No ----------
-                int admissionYear = int.Parse(req.AcademicYear);
+                int admissionYear = req.AdmissionDate.Year;
 
                 string admissionNo = await _studentHelper.GenerateAdmissionNoAsync(
                     req.SchoolId,

@@ -19,7 +19,7 @@ namespace VidyaOSDAL.DTOs
 
             public DateTime DOB { get; set; }
             public string AcademicYear { get; set; } = "";
-
+            public DateTime AdmissionDate { get; set; }
             public string ParentPhone { get; set; } = "";
             public string? FatherName { get; set; }
             public string? MotherName { get; set; }

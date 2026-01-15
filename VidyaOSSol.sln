@@ -32,6 +32,8 @@ Project("{E24C65DC-7377-472B-9ABA-BC803B73C61A}") = "VidyaOSClientApp", "..\..\V
 		SlnRelativePath = "..\..\VidyaOS\VidyaOSClientApp\"
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VidyaOSConsoleApp", "VidyaOSConsoleApp\VidyaOSConsoleApp.csproj", "{6F09755B-09A6-476D-89E4-CCD37D0BADC8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -58,6 +60,10 @@ Global
 		{E82E17B8-4FF5-6A19-D257-A39B2F1D3081}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E82E17B8-4FF5-6A19-D257-A39B2F1D3081}.Release|Any CPU.ActiveCfg = Debug|Any CPU
 		{E82E17B8-4FF5-6A19-D257-A39B2F1D3081}.Release|Any CPU.Build.0 = Debug|Any CPU
+		{6F09755B-09A6-476D-89E4-CCD37D0BADC8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6F09755B-09A6-476D-89E4-CCD37D0BADC8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6F09755B-09A6-476D-89E4-CCD37D0BADC8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6F09755B-09A6-476D-89E4-CCD37D0BADC8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
