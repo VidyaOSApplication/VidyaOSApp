@@ -160,5 +160,13 @@ namespace VidyaOSWebAPI.Controllers
 
             return Ok(result);
         }
+        [HttpGet]
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        public async Task<IActionResult> GetTodaysBirthdays(int schoolId)
+        {
+            var result = await _schoolService.GetTodaysBirthdaysAsync(schoolId);
+            return Ok(result);
+        }
+
     }
 }

@@ -760,6 +760,36 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<StudentListDto>>.Ok(students);
         }
+        public async Task<ApiResult<TodayBirthdayResponse>> GetTodaysBirthdaysAsync(int schoolId)
+        {
+            // Birthdays should always use LOCAL date
+            var today = DateOnly.FromDateTime(DateTime.Today);
+
+            var students = await _context.Students
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.IsActive == true &&
+                    s.Dob.HasValue &&
+                    s.Dob.Value.Month == today.Month &&
+                    s.Dob.Value.Day == today.Day
+                )
+                .Select(s => new BirthdayPersonDto
+                {
+                    UserId = s.StudentId,
+                    Name = s.FirstName + " " + s.LastName,
+                    Role = "Student",
+                    Dob = s.Dob!.Value
+                })
+                .ToListAsync();
+
+            return ApiResult<TodayBirthdayResponse>.Ok(new TodayBirthdayResponse
+            {
+                Students = students
+            });
+        }
+
+
+
 
 
     }
