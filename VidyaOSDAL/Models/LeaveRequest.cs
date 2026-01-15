@@ -24,5 +24,4 @@ public partial class LeaveRequest
     public int? ApprovedBy { get; set; }
 
     public DateOnly? ApprovedOn { get; set; }
-
 }
