@@ -199,6 +199,65 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<ExamListResponse>>.Ok(exams);
         }
+        // ---------------- GET SUBJECTS FOR EXAM + CLASS ----------------
+        public async Task<ApiResult<object>> GetExamToAddSubjectsAsync(
+            int examId,
+            int classId,
+            int schoolId)
+        {
+            // 1. Validate exam
+            var exam = await _context.Exams
+                .FirstOrDefaultAsync(e =>
+                    e.ExamId == examId &&
+                    e.SchoolId == schoolId &&
+                    e.IsActive == true);
+
+            if (exam == null)
+                return ApiResult<object>.Fail("Exam not found");
+
+            // 2. Validate exam-class mapping
+            bool validClass = await _context.ExamClasses.AnyAsync(ec =>
+                ec.ExamId == examId &&
+                ec.ClassId == classId);
+
+            if (!validClass)
+                return ApiResult<object>.Fail("Class not linked to exam");
+
+            // 3. Load subjects for class
+            var subjects = await _context.Subjects
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.ClassId == classId &&
+                    s.IsActive == true)
+                .Select(s => new
+                {
+                    s.SubjectId,
+                    s.SubjectName
+                })
+                .ToListAsync();
+
+            // 4. Already assigned subjects (edit mode ready)
+            var assigned = await _context.ExamSubjects
+                .Where(es =>
+                    es.ExamId == examId &&
+                    es.ClassId == classId)
+                .Select(es => new
+                {
+                    es.SubjectId,
+                    es.ExamDate,
+                    es.MaxMarks
+                })
+                .ToListAsync();
+
+            return ApiResult<object>.Ok(new
+            {
+                exam.ExamName,
+                exam.AcademicYear,
+                subjects,
+                assignedSubjects = assigned
+            });
+        }
+
 
     }
 }

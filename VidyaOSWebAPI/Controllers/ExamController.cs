@@ -63,6 +63,20 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _service.GetExamsAsync(schoolId);
             return result.Success ? Ok(result) : BadRequest(result);
         }
+        [HttpGet]
+        public async Task<IActionResult> GetExamToAddSubjects(int examId, int classId)
+        {
+            // schoolId from JWT (same pattern as your other controllers)
+            int schoolId = int.Parse(User.FindFirst("schoolId")!.Value);
+
+            var result = await _service.GetExamToAddSubjectsAsync(
+                examId,
+                classId,
+                schoolId
+            );
+
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
     }
 
 }
