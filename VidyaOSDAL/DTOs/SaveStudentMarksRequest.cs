@@ -11,8 +11,15 @@ namespace VidyaOSDAL.DTOs
         public int SchoolId { get; set; }
         public int ExamId { get; set; }
         public int ClassId { get; set; }
+        public int SubjectId { get; set; }
+        public List<StudentMarkDto> Marks { get; set; } = new();
+    }
 
-        public List<StudentMarkItem> Marks { get; set; } = new();
+    public class StudentMarkDto
+    {
+        public int StudentId { get; set; }
+        public int MarksObtained { get; set; }
+        public bool IsAbsent { get; set; }
     }
 
     public class StudentMarkItem

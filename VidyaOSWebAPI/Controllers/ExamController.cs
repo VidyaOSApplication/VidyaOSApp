@@ -42,13 +42,13 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // 4️⃣ SAVE MARKS
-        [HttpPost]
-        [Authorize(Roles = "Teacher")]
-        public async Task<IActionResult> SaveMarks(SaveStudentMarksRequest request)
-        {
-            var result = await _service.SaveStudentMarksAsync(request);
-            return result.Success ? Ok(result) : BadRequest(result);
-        }
+        //[HttpPost]
+        //[Authorize(Roles = "Teacher")]
+        //public async Task<IActionResult> SaveMarks(SaveStudentMarksRequest request)
+        //{
+        //    var result = await _service.SaveStudentMarksAsync(request);
+        //    return result.Success ? Ok(result) : BadRequest(result);
+        //}
 
         // 5️⃣ STUDENT RESULT
         [HttpGet]
@@ -64,10 +64,10 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
         [HttpGet]
-        public async Task<IActionResult> GetExamToAddSubjects(int examId, int classId)
+        public async Task<IActionResult> GetExamToAddSubjects(int examId, int classId,int schoolId)
         {
             // schoolId from JWT (same pattern as your other controllers)
-            int schoolId = int.Parse(User.FindFirst("schoolId")!.Value);
+            //int schoolId = int.Parse(User.FindFirst("schoolId")!.Value);
 
             var result = await _service.GetExamToAddSubjectsAsync(
                 examId,
@@ -77,6 +77,38 @@ namespace VidyaOSWebAPI.Controllers
 
             return result.Success ? Ok(result) : BadRequest(result);
         }
+        [HttpGet]
+        public async Task<IActionResult> GetAssignedSubjects(
+    int examId,
+    int classId,
+    int schoolId)
+        {
+            var result = await _service.GetAssignedSubjectsAsync(
+                examId, classId, schoolId);
+
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+
+        [HttpGet]
+        public async Task<IActionResult> GetStudentsForMarks(
+            int examId,
+            int classId,
+            int subjectId)
+        {
+            var result = await _service.GetStudentsForMarksAsync(
+                examId, classId, subjectId);
+
+            return Ok(result);
+        }
+        [HttpPost]
+        public async Task<IActionResult> SaveMarks([FromBody] SaveStudentMarksRequest request)
+        {
+            var result = await _service.SaveStudentMarksAsync(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+
     }
 
 }
