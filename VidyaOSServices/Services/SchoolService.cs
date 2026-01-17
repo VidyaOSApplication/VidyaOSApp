@@ -788,6 +788,33 @@ namespace VidyaOSServices.Services
             });
         }
 
+        public async Task<ApiResult<object>> GenerateRollNumbersAlphabeticallyAsync(
+    int schoolId, int classId, int sectionId)
+        {
+            var students = await _context.Students
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.ClassId == classId &&
+                    s.SectionId == sectionId &&
+                    s.IsActive == true)
+                .OrderBy(s => s.FirstName)
+                .ThenBy(s => s.LastName)
+                .ToListAsync();
+
+            if (!students.Any())
+                return ApiResult<object>.Fail("No students found.");
+
+            int roll = 1;
+            foreach (var student in students)
+            {
+                student.RollNo = roll++;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return ApiResult<object>.Ok(null,
+                "Roll numbers generated alphabetically.");
+        }
 
 
 

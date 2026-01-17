@@ -167,6 +167,16 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GetTodaysBirthdaysAsync(schoolId);
             return Ok(result);
         }
+        [HttpPost]
+        public async Task<IActionResult> GenerateRollNos(
+                        GenerateRollNoRequest req)
+        {
+            var result = await _schoolService
+                .GenerateRollNumbersAlphabeticallyAsync(
+                    req.SchoolId, req.ClassId, req.SectionId);
+
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
 
     }
 }
