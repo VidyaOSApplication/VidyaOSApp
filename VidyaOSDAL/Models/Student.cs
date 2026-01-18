@@ -48,4 +48,6 @@ public partial class Student
     public bool? IsActive { get; set; }
 
     public DateTime? CreatedAt { get; set; }
+
+    public int? StreamId { get; set; }
 }

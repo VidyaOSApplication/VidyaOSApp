@@ -47,6 +47,8 @@ public partial class VidyaOsContext : DbContext
 
     public virtual DbSet<Section> Sections { get; set; }
 
+    public virtual DbSet<Stream> Streams { get; set; }
+
     public virtual DbSet<Student> Students { get; set; }
 
     public virtual DbSet<StudentFee> StudentFees { get; set; }
@@ -256,6 +258,14 @@ public partial class VidyaOsContext : DbContext
 
             entity.Property(e => e.RollSeq).HasDefaultValue(0);
             entity.Property(e => e.SectionName).HasMaxLength(10);
+        });
+
+        modelBuilder.Entity<Stream>(entity =>
+        {
+            entity.HasKey(e => e.StreamId).HasName("PK__Streams__07C87A924187F0A7");
+
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.StreamName).HasMaxLength(50);
         });
 
         modelBuilder.Entity<Student>(entity =>

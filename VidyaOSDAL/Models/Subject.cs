@@ -15,5 +15,7 @@ public partial class Subject
 
     public bool? IsActive { get; set; }
 
+    public int? StreamId { get; set; }
+
     public virtual ICollection<ExamSubject> ExamSubjects { get; set; } = new List<ExamSubject>();
 }
