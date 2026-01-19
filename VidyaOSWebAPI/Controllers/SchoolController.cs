@@ -30,18 +30,25 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         [HttpGet]
-        //[Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> ViewAttendance(
             [FromQuery] int schoolId,
             [FromQuery] int classId,
             [FromQuery] int sectionId,
-            [FromQuery] DateTime date)
+            [FromQuery] DateTime date,
+            [FromQuery] int? streamId // ✅ OPTIONAL
+)
         {
             var result = await _schoolService.ViewAttendanceAsync(
-                schoolId, classId, sectionId, DateOnly.FromDateTime(date));
+                schoolId,
+                classId,
+                sectionId,
+                DateOnly.FromDateTime(date),
+                streamId
+            );
 
             return Ok(result);
         }
+
         [HttpPost]
         public async Task<IActionResult> ApplyLeave(ApplyLeaveRequest request)
         {

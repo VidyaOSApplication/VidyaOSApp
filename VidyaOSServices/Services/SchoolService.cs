@@ -114,32 +114,28 @@ namespace VidyaOSServices.Services
         }
 
         public async Task<AttendanceViewResponse> ViewAttendanceAsync(
-            int schoolId,
-            int classId,
-            int sectionId,
-            DateOnly date)
+    int schoolId,
+    int classId,
+    int sectionId,
+    DateOnly date,
+    int? streamId // ✅ NEW (OPTIONAL)
+)
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-            // 🚫 Future date safeguard
-            //if (date > today)
-            //{
-            //    return new AttendanceViewResponse
-            //    {
-            //        AttendanceDate = date,
-            //        AttendanceTaken = false,
-            //        Summary = new AttendanceSummary(),
-            //        Students = new List<AttendanceViewStudentDto>()
-            //    };
-            //}
-
-            // 1️⃣ Students of class + section
-            var students = await _context.Students
+            // 1️⃣ Students of class + section (+ stream only for 11/12)
+            var studentsQuery = _context.Students
                 .Where(s =>
                     s.SchoolId == schoolId &&
                     s.ClassId == classId &&
                     s.SectionId == sectionId &&
-                    s.IsActive == true)
+                    s.IsActive == true);
+
+            // ✅ APPLY STREAM FILTER ONLY FOR 11 & 12
+            if ((classId == 11 || classId == 12) && streamId.HasValue)
+            {
+                studentsQuery = studentsQuery.Where(s => s.StreamId == streamId);
+            }
+
+            var students = await studentsQuery
                 .OrderBy(s => s.RollNo)
                 .Select(s => new
                 {
@@ -155,14 +151,14 @@ namespace VidyaOSServices.Services
                 return new AttendanceViewResponse
                 {
                     Success = false,
-                    Message = "No students found for selected class and section",
+                    Message = "No students found for selected filters",
                     AttendanceDate = date
                 };
             }
 
             var userIds = students.Select(s => s.UserId).ToList();
 
-            // 2️⃣ Approved leave for date
+            // 2️⃣ Approved leaves
             var leaveUserIds = await _context.Leaves
                 .Where(l =>
                     l.SchoolId == schoolId &&
@@ -172,7 +168,7 @@ namespace VidyaOSServices.Services
                 .Select(l => l.UserId)
                 .ToListAsync();
 
-            // 3️⃣ Attendance only for these students
+            // 3️⃣ Attendance records
             var attendance = await _context.Attendances
                 .Where(a =>
                     a.SchoolId == schoolId &&
@@ -186,7 +182,6 @@ namespace VidyaOSServices.Services
 
             var result = students.Select(s =>
             {
-                // 🏖️ Leave overrides everything
                 if (leaveUserIds.Contains(s.UserId))
                 {
                     leave++;
