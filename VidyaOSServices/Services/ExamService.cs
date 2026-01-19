@@ -155,23 +155,22 @@ namespace VidyaOSServices.Services
     int examId,
     int classId)
         {
-            var subjects = await (
-                from es in _context.ExamSubjects
-                join s in _context.Subjects on es.SubjectId equals s.SubjectId
-                where es.ExamId == examId && es.ClassId == classId
-                select new
+            var subjects = await _context.Subjects
+                .Where(s => s.ClassId == classId && s.IsActive==true)
+                .Select(s => new
                 {
-                    s.SubjectId,
-                    s.SubjectName,
-                    IsCompleted = _context.StudentMarks.Any(m =>
-                        m.ExamId == examId &&
-                        m.ClassId == classId &&
-                        m.SubjectId == s.SubjectId)
-                }
-            ).ToListAsync();
+                    subjectId = s.SubjectId,
+                    subjectName = s.SubjectName,
+                    isScheduled = _context.ExamSubjects.Any(es =>
+                        es.ExamId == examId &&
+                        es.ClassId == classId &&
+                        es.SubjectId == s.SubjectId)
+                })
+                .ToListAsync();
 
             return ApiResult<object>.Ok(new { subjects });
         }
+
 
 
         public async Task<ApiResult<object>> CanDeclareResultAsync(int examId)
@@ -215,7 +214,7 @@ namespace VidyaOSServices.Services
     int subjectId,
     int? streamId)
         {
-            // 🔍 Validate that subject is part of exam schedule
+            // ✅ Validate subject scheduled
             bool validExamSubject = await _context.ExamSubjects.AnyAsync(es =>
                 es.ExamId == examId &&
                 es.ClassId == classId &&
@@ -225,37 +224,32 @@ namespace VidyaOSServices.Services
                 return new
                 {
                     success = false,
-                    message = "Subject not scheduled for this exam",
+                    message = "Subject not scheduled",
                     students = new List<object>()
                 };
 
-            // 👨‍🎓 Load students (stream filter only for class 11/12)
-            var students = await _context.Students
-                .Where(s =>
-                    s.ClassId == classId &&
-                    s.IsActive == true &&
-                    (streamId == null || s.StreamId == streamId))
-                .OrderBy(s => s.RollNo)
-                .Select(s => new
+            var students = await (
+                from s in _context.Students
+                where s.ClassId == classId
+                      && s.IsActive==true
+                      && (streamId == null || s.StreamId == streamId)
+                orderby s.RollNo
+                let mark = _context.StudentMarks.FirstOrDefault(m =>
+                    m.StudentId == s.StudentId &&
+                    m.ExamId == examId &&
+                    m.ClassId == classId &&
+                    m.SubjectId == subjectId)
+                select new
                 {
-                    s.StudentId,
-                    s.RollNo,
-                    StudentName = s.FirstName + " " + s.LastName,
+                    studentId = s.StudentId,
+                    rollNo = s.RollNo,
+                    studentName = s.FirstName + " " + s.LastName,
 
-                    // 📝 Existing marks (if already entered)
-                    Mark = _context.StudentMarks
-                        .Where(m =>
-                            m.StudentId == s.StudentId &&
-                            m.ExamId == examId &&
-                            m.SubjectId == subjectId)
-                        .Select(m => new
-                        {
-                            m.MarksObtained,
-                            m.IsAbsent
-                        })
-                        .FirstOrDefault()
-                })
-                .ToListAsync();
+                    // ✅ PREFILL LOGIC
+                    marksObtained = mark != null ? mark.MarksObtained : (int?)null,
+                    isAbsent = mark != null && mark.IsAbsent==true
+                }
+            ).ToListAsync();
 
             return new
             {
@@ -266,6 +260,7 @@ namespace VidyaOSServices.Services
                 students
             };
         }
+
         public async Task<ApiResult<object>> GetSubjectsForScheduleAsync(
     int examId,
     int classId,
@@ -354,6 +349,10 @@ namespace VidyaOSServices.Services
 
             foreach (var m in req.Marks)
             {
+                // 🔥 ABSOLUTE FIX (prevents class 3 crash)
+                if (!m.IsAbsent && m.MarksObtained == null)
+                    continue;
+
                 var existing = await _context.StudentMarks.FirstOrDefaultAsync(x =>
                     x.StudentId == m.StudentId &&
                     x.ExamId == req.ExamId &&
@@ -362,7 +361,7 @@ namespace VidyaOSServices.Services
 
                 if (existing != null)
                 {
-                    existing.MarksObtained = m.MarksObtained;
+                    existing.MarksObtained = (int)m.MarksObtained;
                     existing.IsAbsent = m.IsAbsent;
                 }
                 else
@@ -373,41 +372,18 @@ namespace VidyaOSServices.Services
                         StudentId = m.StudentId,
                         ExamId = req.ExamId,
                         ClassId = req.ClassId,
-                        SubjectId = req.SubjectId,   // ✅ FIXED
-                        MarksObtained = m.MarksObtained,
-                        MaxMarks = examSubject.MaxMarks,
-                        IsAbsent = m.IsAbsent
+                        SubjectId = req.SubjectId,
+                        MarksObtained = (int)m.MarksObtained,
+                        IsAbsent = m.IsAbsent,
+                        MaxMarks = examSubject.MaxMarks > 0 ? examSubject.MaxMarks : 100
                     });
                 }
             }
 
             await _context.SaveChangesAsync();
 
-            // ✅ CHECK IF ALL SUBJECTS HAVE MARKS
-            var totalSubjects = await _context.ExamSubjects
-                .Where(x => x.ExamId == req.ExamId)
-                .Select(x => new { x.ClassId, x.SubjectId })
-                .Distinct()
-                .CountAsync();
-
-            var subjectsWithMarks = await _context.StudentMarks
-                .Where(x => x.ExamId == req.ExamId)
-                .Select(x => new { x.ClassId, x.SubjectId })
-                .Distinct()
-                .CountAsync();
-
-            if (totalSubjects == subjectsWithMarks && totalSubjects > 0)
-            {
-                var exam = await _context.Exams.FindAsync(req.ExamId);
-                if (exam != null)
-                    exam.Status = "Marks Entered";
-
-                await _context.SaveChangesAsync();
-            }
-
             return ApiResult<string>.Ok("OK", "Marks saved successfully.");
         }
-
 
 
 
@@ -597,11 +573,17 @@ public async Task<ApiResult<List<StreamDto>>> GetStreamsAsync(int schoolId, int 
             }
 
             await _context.SaveChangesAsync();
+            var exam1 = await _context.Exams.FindAsync(request.ExamId);
+            if (exam1 != null && exam1.Status == "Draft")
+            {
+                exam1.Status = "Scheduled";
+            }
+
+            await _context.SaveChangesAsync();
+
             return ApiResult<object>.Ok("Exam schedule saved");
         }
-
-
-
+        
 
     }
 }

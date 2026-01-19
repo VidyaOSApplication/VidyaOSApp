@@ -18,7 +18,7 @@ namespace VidyaOSDAL.DTOs
     public class StudentMarkDto
     {
         public int StudentId { get; set; }
-        public int MarksObtained { get; set; }
+        public int? MarksObtained { get; set; }
         public bool IsAbsent { get; set; }
     }
 
