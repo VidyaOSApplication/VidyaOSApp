@@ -434,69 +434,62 @@ namespace VidyaOSServices.Services
                 $"Leave {req.Action.ToLower()} successfully."
             );
         }
-        public async Task<ApiResult<object>> GenerateMonthlyFeeAsync(
-    GenerateMonthlyFeeRequest req)
+        public async Task<ApiResult<string>> GenerateMonthlyFeesAsync(
+    int schoolId,
+    string feeMonth   // format: yyyy-MM
+)
         {
-            if (req.Month < 1 || req.Month > 12)
-                return ApiResult<object>.Fail("Invalid month.");
+            if (schoolId <= 0 || string.IsNullOrWhiteSpace(feeMonth))
+                return ApiResult<string>.Fail("Invalid input.");
 
-            string feeMonth = $"{req.Year}-{req.Month:D2}";
-
-            var feeStructures = await _context.FeeStructures
-                .Where(f => f.SchoolId == req.SchoolId && f.IsActive == true)
+            // 1️⃣ Load all active students
+            var students = await _context.Students
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.IsActive == true)
                 .ToListAsync();
 
-            if (!feeStructures.Any())
-                return ApiResult<object>.Fail("No fee structures found.");
-
-            int generated = 0;
-            int skipped = 0;
-
-            foreach (var fee in feeStructures)
+            foreach (var student in students)
             {
-                var students = await _context.Students
-                    .Where(s =>
-                        s.SchoolId == req.SchoolId &&
-                        s.ClassId == fee.ClassId &&
-                        s.IsActive == true)
-                    .ToListAsync();
+                // 2️⃣ Skip if fee already generated
+                bool exists = await _context.StudentFees.AnyAsync(f =>
+                    f.StudentId == student.StudentId &&
+                    f.FeeMonth == feeMonth);
 
-                foreach (var student in students)
+                if (exists)
+                    continue;
+
+                // 3️⃣ Find fee structure
+                var feeStructure = await _context.FeeStructures
+                    .FirstOrDefaultAsync(f =>
+                        f.SchoolId == schoolId &&
+                        f.ClassId == student.ClassId &&
+                        f.IsActive == true &&
+                        (
+                            student.ClassId < 11 ||
+                            f.StreamId == student.StreamId
+                        )
+                    );
+
+                if (feeStructure == null)
+                    continue;
+
+                // 4️⃣ Create student fee
+                _context.StudentFees.Add(new StudentFee
                 {
-                    bool exists = await _context.StudentFees.AnyAsync(sf =>
-                        sf.StudentId == student.StudentId &&
-                        sf.FeeMonth == feeMonth);
-
-                    if (exists)
-                    {
-                        skipped++;
-                        continue;
-                    }
-
-                    _context.StudentFees.Add(new StudentFee
-                    {
-                        StudentId = student.StudentId,
-                        FeeMonth = feeMonth,
-                        Amount = fee.MonthlyAmount,
-                        Status = "Pending"
-                    });
-
-                    generated++;
-                }
+                    StudentId = student.StudentId,
+                    FeeMonth = feeMonth,
+                    Amount = feeStructure.MonthlyAmount,
+                    Status = "Pending"
+                });
             }
 
             await _context.SaveChangesAsync();
 
-            return ApiResult<object>.Ok(
-                new
-                {
-                    FeeMonth = feeMonth,
-                    FeesGenerated = generated,
-                    Skipped = skipped
-                },
-                "Monthly fee generated successfully."
-            );
+            return ApiResult<string>.Ok("Fees generated successfully.");
         }
+
+
         public async Task<ApiResult<List<PendingFeeResponse>>> GetPendingFeesAsync(
     int schoolId)
         {
@@ -524,14 +517,14 @@ namespace VidyaOSServices.Services
         public async Task<ApiResult<CollectFeesResponse>> CollectFeesAsync(
     CollectFeesRequest req)
         {
-            // ---------- VALIDATION ----------
             if (req.StudentId <= 0 || req.SchoolId <= 0)
-                return ApiResult<CollectFeesResponse>.Fail("Invalid student or school.");
+                return ApiResult<CollectFeesResponse>
+                    .Fail("Invalid student or school.");
 
             if (req.FeeMonths == null || !req.FeeMonths.Any())
-                return ApiResult<CollectFeesResponse>.Fail("Select at least one fee month.");
+                return ApiResult<CollectFeesResponse>
+                    .Fail("Select at least one fee month.");
 
-            // ---------- FETCH FEES ----------
             var fees = await _context.StudentFees
                 .Where(f =>
                     f.StudentId == req.StudentId &&
@@ -540,11 +533,11 @@ namespace VidyaOSServices.Services
                 .ToListAsync();
 
             if (!fees.Any())
-                return ApiResult<CollectFeesResponse>.Fail("No pending fees found.");
+                return ApiResult<CollectFeesResponse>
+                    .Fail("No pending fees found.");
 
             decimal totalAmount = fees.Sum(f => f.Amount ?? 0);
 
-            // ---------- MARK AS PAID ----------
             foreach (var fee in fees)
             {
                 fee.Status = "Paid";
@@ -554,14 +547,12 @@ namespace VidyaOSServices.Services
 
             await _context.SaveChangesAsync();
 
-            // ---------- RECEIPT NO ----------
             var school = await _context.Schools
                 .FirstAsync(s => s.SchoolId == req.SchoolId);
 
             string receiptNo =
                 $"{school.SchoolCode}/{DateTime.UtcNow:yyyy}/{fees.First().StudentFeeId}";
 
-            // ---------- RESPONSE ----------
             return ApiResult<CollectFeesResponse>.Ok(
                 new CollectFeesResponse
                 {
@@ -575,27 +566,49 @@ namespace VidyaOSServices.Services
             );
         }
 
+
         public async Task<ApiResult<FeeStructureResponse>> SaveFeeStructureAsync(
-    FeeStructureRequest req)
+     FeeStructureRequest req)
         {
+            // 🔴 BASIC VALIDATIONS
             if (req == null)
                 return ApiResult<FeeStructureResponse>.Fail("Request is required.");
 
+            if (req.SchoolId <= 0)
+                return ApiResult<FeeStructureResponse>.Fail("Invalid school.");
+
+            if (req.ClassId <= 0)
+                return ApiResult<FeeStructureResponse>.Fail("Invalid class.");
+
+            if (string.IsNullOrWhiteSpace(req.FeeName))
+                return ApiResult<FeeStructureResponse>.Fail("Fee name is required.");
+
             if (req.MonthlyAmount <= 0)
+                return ApiResult<FeeStructureResponse>.Fail("Monthly amount must be greater than zero.");
+
+            // 🔴 STREAM RULE
+            // Class 11 & 12 → stream REQUIRED
+            if ((req.ClassId == 11 || req.ClassId == 12) && req.StreamId == null)
                 return ApiResult<FeeStructureResponse>.Fail(
-                    "Monthly amount must be greater than zero."
+                    "Stream is required for class 11 and 12."
                 );
 
+            // Class 1–10 → stream MUST be null
+            if (req.ClassId < 11)
+                req.StreamId = null;
+
+            // 🔍 CHECK EXISTING FEE (School + Class + Stream)
             var existingFee = await _context.FeeStructures
                 .FirstOrDefaultAsync(f =>
                     f.SchoolId == req.SchoolId &&
                     f.ClassId == req.ClassId &&
+                    f.StreamId == req.StreamId &&
                     f.IsActive == true
                 );
 
+            // 🔁 UPDATE
             if (existingFee != null)
             {
-                // 🔁 UPDATE
                 existingFee.FeeName = req.FeeName;
                 existingFee.MonthlyAmount = req.MonthlyAmount;
 
@@ -605,23 +618,26 @@ namespace VidyaOSServices.Services
                     new FeeStructureResponse
                     {
                         FeeStructureId = existingFee.FeeStructureId,
-                        ClassId = (int)existingFee.ClassId,
+                        ClassId = existingFee.ClassId!.Value,
+                        StreamId = existingFee.StreamId,
                         FeeName = existingFee.FeeName!,
-                        MonthlyAmount = (decimal)existingFee.MonthlyAmount,
+                        MonthlyAmount = existingFee.MonthlyAmount!.Value,
                         IsActive = true
                     },
                     "Fee structure updated successfully."
                 );
             }
 
-            // ➕ CREATE
+            // ➕ CREATE NEW
             var fee = new FeeStructure
             {
                 SchoolId = req.SchoolId,
                 ClassId = req.ClassId,
+                StreamId = req.StreamId, // null for 1–10, value for 11–12
                 FeeName = req.FeeName,
                 MonthlyAmount = req.MonthlyAmount,
-                IsActive = true
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.FeeStructures.Add(fee);
@@ -631,14 +647,16 @@ namespace VidyaOSServices.Services
                 new FeeStructureResponse
                 {
                     FeeStructureId = fee.FeeStructureId,
-                    ClassId = (int)fee.ClassId,
+                    ClassId = fee.ClassId!.Value,
+                    StreamId = fee.StreamId,
                     FeeName = fee.FeeName!,
-                    MonthlyAmount = (decimal)fee.MonthlyAmount,
+                    MonthlyAmount = fee.MonthlyAmount!.Value,
                     IsActive = true
                 },
                 "Fee structure created successfully."
             );
         }
+
 
         public async Task<ApiResult<List<FeeStructureListResponse>>> GetFeeStructuresAsync(
     int schoolId)
@@ -684,6 +702,8 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<StudentFeeHistoryResponse>>.Ok(fees);
         }
+
+
         public async Task<ApiResult<FeeReceiptResponse>> GenerateFeeReceiptAsync(
     int studentId, string feeMonth)
         {

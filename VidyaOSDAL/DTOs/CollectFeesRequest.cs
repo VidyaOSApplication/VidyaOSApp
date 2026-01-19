@@ -11,6 +11,10 @@ namespace VidyaOSDAL.DTOs
         public int SchoolId { get; set; }
         public int StudentId { get; set; }
 
+        public int ClassId { get; set; }
+        public int? StreamId { get; set; }
+
+
         // "2026-01", "2026-02"
         public List<string> FeeMonths { get; set; } = new();
 

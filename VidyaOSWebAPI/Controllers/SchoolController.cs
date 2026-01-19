@@ -107,11 +107,19 @@ namespace VidyaOSWebAPI.Controllers
         [HttpPost]
         [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> GenerateMonthlyFee(
-            GenerateMonthlyFeeRequest request)
+    [FromBody] GenerateMonthlyFeeRequest request)
         {
-            var result = await _schoolService.GenerateMonthlyFeeAsync(request);
+            if (request == null || string.IsNullOrWhiteSpace(request.FeeMonth))
+                return BadRequest("Invalid request");
+
+            var result = await _schoolService.GenerateMonthlyFeesAsync(
+                request.SchoolId,
+                request.FeeMonth   // ✅ string yyyy-MM
+            );
+
             return result.Success ? Ok(result) : BadRequest(result);
         }
+
 
         // 4️⃣ Get Pending Fees (Admin Dashboard)
         [HttpGet]
