@@ -126,18 +126,18 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _service.DeclareResultAsync(examId);
             return result.Success ? Ok(result) : BadRequest(result);
         }
-        //[HttpGet]
-        //public async Task<IActionResult> GetSubjectsForSchedule(
-        //            int examId,
-        //            int classId)
-        //{
-        //    int schoolId = int.Parse(User.FindFirst("schoolId")!.Value);
+        [HttpGet]
+        public async Task<IActionResult> GetSubjectsForSchedule(
+                    int examId,
+                    int classId)
+        {
+            int schoolId = int.Parse(User.FindFirst("schoolId")!.Value);
 
-        //    var result = await _service.GetSubjectsForScheduleAsync(
-        //        examId, classId, schoolId);
+            var result = await _service.GetSubjectsForScheduleAsync(
+                examId, classId, schoolId);
 
-        //    return result.Success ? Ok(result) : BadRequest(result);
-        //}
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
         [HttpPost]
         public async Task<IActionResult> ScheduleExam([FromBody] ScheduleExamRequest request)
         {

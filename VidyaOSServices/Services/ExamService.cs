@@ -129,14 +129,14 @@ namespace VidyaOSServices.Services
                         ExamId = examId,
                         ClassId = classId,
                         SubjectId = s.SubjectId,
-                        ExamDate = DateOnly.FromDateTime(s.ExamDate),
-                        MaxMarks = s.MaxMarks
+                        ExamDate = DateOnly.FromDateTime((DateTime)s.ExamDate),
+                        MaxMarks = (int)s.MaxMarks
                     });
                 }
                 else
                 {
-                    existing.ExamDate = DateOnly.FromDateTime(s.ExamDate);
-                    existing.MaxMarks = s.MaxMarks;
+                    existing.ExamDate = DateOnly.FromDateTime((DateTime)s.ExamDate);
+                    existing.MaxMarks = (int)s.MaxMarks;
                 }
             }
 
@@ -287,38 +287,29 @@ namespace VidyaOSServices.Services
             if (!validClass)
                 return ApiResult<object>.Fail("Class not linked to exam");
 
-            // 3️⃣ Load ALL class subjects
-            var subjects = await _context.Subjects
-                .Where(s =>
-                    s.SchoolId == schoolId &&
-                    s.ClassId == classId &&
-                    s.IsActive == true)
-                .Select(s => new
+            // 3️⃣ Load ALL class subjects with OPTIONAL schedule
+            var subjects =
+                from s in _context.Subjects
+                where s.SchoolId == schoolId
+                      && s.ClassId == classId
+                      && s.IsActive==true
+                join es in _context.ExamSubjects
+                    .Where(x => x.ExamId == examId && x.ClassId == classId)
+                    on s.SubjectId equals es.SubjectId into gj
+                from es in gj.DefaultIfEmpty()
+                select new
                 {
                     subjectId = s.SubjectId,
                     subjectName = s.SubjectName,
 
-                    // 👇 Try loading existing schedule if exists
-                    examDate = _context.ExamSubjects
-                        .Where(es =>
-                            es.ExamId == examId &&
-                            es.ClassId == classId &&
-                            es.SubjectId == s.SubjectId)
-                        .Select(es => es.ExamDate)
-                        .FirstOrDefault(),
+                    // ✅ IMPORTANT FIX
+                    examDate = es != null ? (DateOnly?)es.ExamDate : null,
+                    maxMarks = es != null ? (int?)es.MaxMarks : null
+                };
 
-                    maxMarks = _context.ExamSubjects
-                        .Where(es =>
-                            es.ExamId == examId &&
-                            es.ClassId == classId &&
-                            es.SubjectId == s.SubjectId)
-                        .Select(es => es.MaxMarks)
-                        .FirstOrDefault()
-                })
-                .ToListAsync();
-
-            return ApiResult<object>.Ok(subjects);
+            return ApiResult<object>.Ok(await subjects.ToListAsync());
         }
+
 
 
 
@@ -556,35 +547,59 @@ public async Task<ApiResult<List<StreamDto>>> GetStreamsAsync(int schoolId, int 
         // streams is NEVER null here (EF Core guarantee)
         return ApiResult<List<StreamDto>>.Ok(streams);
     }
-        public async Task<ApiResult<string>> ScheduleExamAsync(ScheduleExamRequest req)
+        public async Task<ApiResult<object>> ScheduleExamAsync(
+    ScheduleExamRequest request)
         {
-            foreach (var s in req.Subjects)
+            // 🔐 Validate exam
+            var exam = await _context.Exams.FirstOrDefaultAsync(e =>
+                e.ExamId == request.ExamId &&
+                e.SchoolId == request.SchoolId &&
+                e.IsActive==true);
+
+            if (exam == null)
+                return ApiResult<object>.Fail("Exam not found");
+
+            foreach (var s in request.Subjects)
             {
-                var examSubject = await _context.ExamSubjects.FirstOrDefaultAsync(x =>
-                    x.ExamId == req.ExamId &&
-                    x.ClassId == req.ClassId &&
-                    x.SubjectId == s.SubjectId
-                );
+                // 🔍 Check existing record
+                var examSubject = await _context.ExamSubjects.FirstOrDefaultAsync(es =>
+                    es.ExamId == request.ExamId &&
+                    es.ClassId == request.ClassId &&
+                    es.SubjectId == s.SubjectId);
+
+                // 🗓️ Convert DateTime → DateOnly SAFELY
+                var examDate = s.ExamDate.HasValue
+                    ? DateOnly.FromDateTime(s.ExamDate.Value)
+                    : DateOnly.FromDateTime(DateTime.Today);
+
+                var maxMarks = s.MaxMarks ?? 100;
 
                 if (examSubject == null)
-                    continue;
+                {
+                    // ➕ INSERT
+                    examSubject = new ExamSubject
+                    {
+                        ExamId = request.ExamId,
+                        ClassId = request.ClassId,
+                        SubjectId = s.SubjectId,
+                        ExamDate = examDate,
+                        MaxMarks = maxMarks
+                    };
 
-                examSubject.ExamDate = DateOnly.FromDateTime(s.ExamDate);
-                examSubject.MaxMarks = s.MaxMarks;
+                    _context.ExamSubjects.Add(examSubject);
+                }
+                else
+                {
+                    // ✏️ UPDATE
+                    examSubject.ExamDate = examDate;
+                    examSubject.MaxMarks = maxMarks;
+                }
             }
 
             await _context.SaveChangesAsync();
-
-            // ✅ Update exam status
-            var exam = await _context.Exams.FindAsync(req.ExamId);
-            if (exam != null && exam.Status == "Subjects Assigned")
-            {
-                exam.Status = "Scheduled";
-                await _context.SaveChangesAsync();
-            }
-
-            return ApiResult<string>.Ok("OK", "Exam scheduled successfully");
+            return ApiResult<object>.Ok("Exam schedule saved");
         }
+
 
 
 

@@ -10,14 +10,16 @@ namespace VidyaOSDAL.DTOs
     {
         public int ExamId { get; set; }
         public int ClassId { get; set; }
-        public List<ScheduleSubjectDto> Subjects { get; set; } = new();
+        public int SchoolId { get; set; }
+        public List<ScheduleSubjectDto> Subjects { get; set; } = [];
     }
+
 
     public class ScheduleSubjectDto
     {
         public int SubjectId { get; set; }
-        public DateTime ExamDate { get; set; }
-        public int MaxMarks { get; set; }
+        public DateTime? ExamDate { get; set; }
+        public int? MaxMarks { get; set; }
     }
 
 }
