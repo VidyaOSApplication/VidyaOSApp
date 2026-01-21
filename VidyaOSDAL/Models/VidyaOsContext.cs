@@ -23,6 +23,10 @@ public partial class VidyaOsContext : DbContext
 
     public virtual DbSet<Class> Classes { get; set; }
 
+    public virtual DbSet<ClassSubject> ClassSubjects { get; set; }
+
+    public virtual DbSet<ClassTimetable> ClassTimetables { get; set; }
+
     public virtual DbSet<Exam> Exams { get; set; }
 
     public virtual DbSet<ExamClass> ExamClasses { get; set; }
@@ -38,6 +42,8 @@ public partial class VidyaOsContext : DbContext
     public virtual DbSet<LeaveRequest> Leaves { get; set; }
 
     public virtual DbSet<LibraryBook> LibraryBooks { get; set; }
+
+    public virtual DbSet<MasterSubject> MasterSubjects { get; set; }
 
     public virtual DbSet<NotificationLog> NotificationLogs { get; set; }
 
@@ -72,10 +78,7 @@ public partial class VidyaOsContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-
-    }
-
+    { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -106,6 +109,29 @@ public partial class VidyaOsContext : DbContext
             entity.HasKey(e => e.ClassId).HasName("PK__Classes__CB1927C0CB38D3AF");
 
             entity.Property(e => e.ClassName).HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<ClassSubject>(entity =>
+        {
+            entity.HasKey(e => e.ClassSubjectId).HasName("PK__ClassSub__79A973599D961451");
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getutcdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+        });
+
+        modelBuilder.Entity<ClassTimetable>(entity =>
+        {
+            entity.HasKey(e => e.TimetableId).HasName("PK__ClassTim__68413F604A7FF4CB");
+
+            entity.HasIndex(e => new { e.SchoolId, e.ClassId, e.SectionId, e.DayOfWeek, e.PeriodNo, e.AcademicYear }, "UX_ClassTimetable_Period").IsUnique();
+
+            entity.Property(e => e.AcademicYear).HasMaxLength(20);
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<Exam>(entity =>
@@ -207,6 +233,14 @@ public partial class VidyaOsContext : DbContext
             entity.Property(e => e.Isbn)
                 .HasMaxLength(50)
                 .HasColumnName("ISBN");
+        });
+
+        modelBuilder.Entity<MasterSubject>(entity =>
+        {
+            entity.HasKey(e => e.MasterSubjectId).HasName("PK__MasterSu__607F5CF4FA3F3696");
+
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.SubjectName).HasMaxLength(100);
         });
 
         modelBuilder.Entity<NotificationLog>(entity =>
