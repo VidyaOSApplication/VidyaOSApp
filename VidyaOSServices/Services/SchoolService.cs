@@ -831,12 +831,12 @@ namespace VidyaOSServices.Services
                 "Roll numbers generated alphabetically.");
         }
         public async Task<ApiResult<string>> CreateClassTimetableAsync(
-        CreateTimetableRequest req)
+    CreateTimetableRequest req)
         {
             if (req == null)
                 return ApiResult<string>.Fail("Request is required.");
 
-            // ⏱ Parse time safely
+            // ⏱ Parse time
             if (!TimeOnly.TryParse(req.StartTime, out var startTime))
                 return ApiResult<string>.Fail("Invalid start time.");
 
@@ -848,20 +848,46 @@ namespace VidyaOSServices.Services
                     "Start time must be before end time."
                 );
 
-            // ❌ Overlap check (CORRECT)
+            // 📅 Effective date validation
+            if (req.EffectiveTo.HasValue &&
+                req.EffectiveFrom > req.EffectiveTo.Value)
+            {
+                return ApiResult<string>.Fail(
+                    "Effective From date cannot be after Effective To date."
+                );
+            }
+
+            // ❌ Period number duplicate check
+            bool periodExists = await _context.ClassTimetables.AnyAsync(t =>
+                t.SchoolId == req.SchoolId &&
+                t.ClassId == req.ClassId &&
+                t.SectionId == req.SectionId &&
+                t.DayOfWeek == req.DayOfWeek &&
+                t.PeriodNo == req.PeriodNo &&
+                t.AcademicYear == req.AcademicYear &&
+                t.IsActive
+            );
+
+            if (periodExists)
+                return ApiResult<string>.Fail(
+                    $"Period {req.PeriodNo} already exists for this day."
+                );
+
+            // ❌ Time overlap check (correct + academic year safe)
             bool overlap = await _context.ClassTimetables.AnyAsync(t =>
                 t.SchoolId == req.SchoolId &&
                 t.ClassId == req.ClassId &&
                 t.SectionId == req.SectionId &&
                 t.DayOfWeek == req.DayOfWeek &&
-                t.IsActive == true &&
+                t.AcademicYear == req.AcademicYear &&
+                t.IsActive &&
                 startTime < t.EndTime &&
                 endTime > t.StartTime
             );
 
             if (overlap)
                 return ApiResult<string>.Fail(
-                    "Timetable period overlaps with existing period."
+                    "Timetable period overlaps with an existing period."
                 );
 
             // ✅ Insert timetable
@@ -895,29 +921,34 @@ namespace VidyaOSServices.Services
         }
 
 
-        public async Task<ApiResult<List<TimetableResponse>>> GetClassTimetableAsync(
-    int schoolId, int classId, int? sectionId)
-        {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-            var data = await (
+        public async Task<ApiResult<List<TimetableResponse>>> GetClassTimetableAsync(
+    int schoolId,
+    int classId,
+    int? sectionId,
+    string academicYear)
+        {
+            var timetable = await (
                 from t in _context.ClassTimetables
                 join s in _context.Subjects
-                    on t.SubjectId equals s.SubjectId into subj
-                from s in subj.DefaultIfEmpty() // ✅ LEFT JOIN
+                    on new { t.SubjectId, t.ClassId }
+                    equals new { s.SubjectId, s.ClassId }
+
                 where
                     t.SchoolId == schoolId &&
                     t.ClassId == classId &&
+                    t.AcademicYear == academicYear &&
                     t.IsActive == true &&
+                    s.IsActive==true &&
+                    s.SchoolId == schoolId &&
                     (
                         sectionId.HasValue
                             ? t.SectionId == sectionId.Value
                             : t.SectionId == null
-                    ) &&
-                    t.EffectiveFrom <= today &&
-                    (t.EffectiveTo == null || t.EffectiveTo >= today)
+                    )
 
                 orderby t.DayOfWeek, t.PeriodNo
+
                 select new TimetableResponse
                 {
                     TimetableId = t.TimetableId,
@@ -925,12 +956,15 @@ namespace VidyaOSServices.Services
                     PeriodNo = t.PeriodNo,
                     StartTime = t.StartTime.ToString("hh:mm tt"),
                     EndTime = t.EndTime.ToString("hh:mm tt"),
-                    SubjectName = s != null ? s.SubjectName : "Not Assigned"
+                    SubjectName = s.SubjectName
                 }
             ).ToListAsync();
 
-            return ApiResult<List<TimetableResponse>>.Ok(data);
+            return ApiResult<List<TimetableResponse>>.Ok(timetable);
         }
+
+
+
         public async Task<ApiResult<string>> AssignSubjectsToClassAsync(
     AssignClassSubjectsRequest req)
         {
@@ -1074,6 +1108,29 @@ namespace VidyaOSServices.Services
             await _context.SaveChangesAsync();
 
             return ApiResult<string>.Ok("Master subject added successfully");
+        }
+        public async Task<ApiResult<List<SubjectDropdownDto>>>
+                GetSubjectsForClassSectionAsync(
+                    int schoolId,
+                    int classId,
+                    int? sectionId)
+        {
+            var subjects = await _context.Subjects
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.ClassId == classId &&
+                    s.IsActive==true
+                )
+                .Select(s => new SubjectDropdownDto
+                {
+                    SubjectId = s.SubjectId,
+                    SubjectName = s.SubjectName
+                })
+                .Distinct()
+                .OrderBy(s => s.SubjectName)
+                .ToListAsync();
+
+            return ApiResult<List<SubjectDropdownDto>>.Ok(subjects);
         }
 
 

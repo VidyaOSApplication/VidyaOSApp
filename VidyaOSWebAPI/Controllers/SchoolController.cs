@@ -206,10 +206,10 @@ namespace VidyaOSWebAPI.Controllers
 
         [HttpGet]
         public async Task<IActionResult> GetClassTimetable(
-            int schoolId, int classId, int? sectionId)
+            int schoolId, int classId, int? sectionId,string academicYear)
         {
             var result = await _schoolService
-                .GetClassTimetableAsync(schoolId, classId, sectionId);
+                .GetClassTimetableAsync(schoolId, classId, sectionId, academicYear);
 
             return Ok(result);
         }
@@ -256,6 +256,18 @@ namespace VidyaOSWebAPI.Controllers
         {
             var result = await _schoolService.DeleteMasterSubjectAsync(id);
             return result.Success ? Ok(result) : BadRequest(result);
+        }
+        [HttpGet]
+        public async Task<IActionResult> GetSubjectsForClassSection(
+            int schoolId,
+            int classId,
+            int? sectionId)
+        {
+            var result = await _schoolService
+                .GetSubjectsForClassSectionAsync(
+                    schoolId, classId, sectionId);
+
+            return Ok(result);
         }
 
     }
