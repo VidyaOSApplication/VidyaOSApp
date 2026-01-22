@@ -15,6 +15,7 @@ namespace VidyaOSWebAPI
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            // 🔥 REQUIRED FOR RENDER (dynamic PORT)
             builder.WebHost.ConfigureKestrel(options =>
             {
                 options.ListenAnyIP(
@@ -24,10 +25,9 @@ namespace VidyaOSWebAPI
 
             // -------------------- SERVICES --------------------
 
-            // Controllers
             builder.Services.AddControllers();
 
-            // DbContext
+            // Database
             builder.Services.AddDbContext<VidyaOsContext>(options =>
                 options.UseSqlServer(
                     builder.Configuration.GetConnectionString("DefaultConnection")
@@ -35,7 +35,8 @@ namespace VidyaOSWebAPI
             );
 
             // JWT Authentication
-            builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            builder.Services
+                .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
                     options.TokenValidationParameters = new TokenValidationParameters
@@ -51,32 +52,30 @@ namespace VidyaOSWebAPI
                             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
                         ),
 
-                        // 🔥 REQUIRED FOR ROLE-BASED AUTH
                         RoleClaimType = ClaimTypes.Role,
                         NameClaimType = ClaimTypes.NameIdentifier
                     };
                 });
 
-            // 🔥 REQUIRED for [Authorize(Roles = "...")]
             builder.Services.AddAuthorization();
 
-            // CORS (Ionic / Angular)
+            // 🔥 CORS FOR NETLIFY + LOCAL DEV
             builder.Services.AddCors(options =>
             {
-                options.AddPolicy("AllowIonicApp", policy =>
+                options.AddPolicy("AllowFrontend", policy =>
                 {
                     policy
                         .WithOrigins(
-                            "http://localhost:8100", // Ionic
-                            "http://localhost:4200"  // Angular (optional)
+                            "http://localhost:8100",        // Ionic local
+                            "http://localhost:4200",        // Angular local
+                            "https://your-app.netlify.app"  // 🔥 Netlify PROD (CHANGE THIS)
                         )
                         .AllowAnyHeader()
-                        .AllowAnyMethod()
-                        .AllowCredentials();
+                        .AllowAnyMethod();
                 });
             });
 
-            // Swagger
+            // Swagger (enable for prod also)
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
@@ -97,7 +96,8 @@ namespace VidyaOSWebAPI
 
             // -------------------- MIDDLEWARE --------------------
 
-            if (app.Environment.IsDevelopment())
+            // Swagger for DEV + PROD (safe for APIs)
+            if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
@@ -107,10 +107,10 @@ namespace VidyaOSWebAPI
 
             app.UseRouting();
 
-            // 🔥 CORS MUST RUN BEFORE AUTH
-            app.UseCors("AllowIonicApp");
+            // 🔥 CORS BEFORE AUTH
+            app.UseCors("AllowFrontend");
 
-            // 🔥 ALLOW PREFLIGHT (OPTIONS) REQUESTS — PRODUCTION SAFE
+            // 🔥 HANDLE PREFLIGHT (OPTIONS) REQUESTS
             app.Use(async (context, next) =>
             {
                 if (context.Request.Method == HttpMethods.Options)
@@ -121,10 +121,8 @@ namespace VidyaOSWebAPI
                 await next();
             });
 
-            // 🔥 AUTHENTICATION FIRST
+            // AUTH
             app.UseAuthentication();
-
-            // 🔥 AUTHORIZATION SECOND
             app.UseAuthorization();
 
             app.MapControllers();
