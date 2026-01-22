@@ -83,6 +83,7 @@ namespace VidyaOSWebAPI
             builder.Services.AddScoped<CommonService>();
             builder.Services.AddScoped<StudentHelper>();
             builder.Services.AddScoped<TeacherHelper>();
+            builder.Services.AddScoped<ExamService>();
             builder.Services.AddScoped<VidyaOSHelper.SchoolHelper.SchoolHelper>();
 
             var app = builder.Build();

@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace VidyaOSDAL.DTOs
 {
-    public class GenerateMonthlyFeeRequest
+    public class MasterSubjectDto
     {
-        public int SchoolId { get; set; }
-        public string FeeMonth { get; set; } = string.Empty;
+        public int MasterSubjectId { get; set; }
+        public string SubjectName { get; set; } = string.Empty;
     }
 }
