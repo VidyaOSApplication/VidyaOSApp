@@ -114,32 +114,28 @@ namespace VidyaOSServices.Services
         }
 
         public async Task<AttendanceViewResponse> ViewAttendanceAsync(
-            int schoolId,
-            int classId,
-            int sectionId,
-            DateOnly date)
+    int schoolId,
+    int classId,
+    int sectionId,
+    DateOnly date,
+    int? streamId // ✅ NEW (OPTIONAL)
+)
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-            // 🚫 Future date safeguard
-            //if (date > today)
-            //{
-            //    return new AttendanceViewResponse
-            //    {
-            //        AttendanceDate = date,
-            //        AttendanceTaken = false,
-            //        Summary = new AttendanceSummary(),
-            //        Students = new List<AttendanceViewStudentDto>()
-            //    };
-            //}
-
-            // 1️⃣ Students of class + section
-            var students = await _context.Students
+            // 1️⃣ Students of class + section (+ stream only for 11/12)
+            var studentsQuery = _context.Students
                 .Where(s =>
                     s.SchoolId == schoolId &&
                     s.ClassId == classId &&
                     s.SectionId == sectionId &&
-                    s.IsActive == true)
+                    s.IsActive == true);
+
+            // ✅ APPLY STREAM FILTER ONLY FOR 11 & 12
+            if ((classId == 11 || classId == 12) && streamId.HasValue)
+            {
+                studentsQuery = studentsQuery.Where(s => s.StreamId == streamId);
+            }
+
+            var students = await studentsQuery
                 .OrderBy(s => s.RollNo)
                 .Select(s => new
                 {
@@ -155,14 +151,14 @@ namespace VidyaOSServices.Services
                 return new AttendanceViewResponse
                 {
                     Success = false,
-                    Message = "No students found for selected class and section",
+                    Message = "No students found for selected filters",
                     AttendanceDate = date
                 };
             }
 
             var userIds = students.Select(s => s.UserId).ToList();
 
-            // 2️⃣ Approved leave for date
+            // 2️⃣ Approved leaves
             var leaveUserIds = await _context.Leaves
                 .Where(l =>
                     l.SchoolId == schoolId &&
@@ -172,7 +168,7 @@ namespace VidyaOSServices.Services
                 .Select(l => l.UserId)
                 .ToListAsync();
 
-            // 3️⃣ Attendance only for these students
+            // 3️⃣ Attendance records
             var attendance = await _context.Attendances
                 .Where(a =>
                     a.SchoolId == schoolId &&
@@ -186,7 +182,6 @@ namespace VidyaOSServices.Services
 
             var result = students.Select(s =>
             {
-                // 🏖️ Leave overrides everything
                 if (leaveUserIds.Contains(s.UserId))
                 {
                     leave++;
@@ -434,69 +429,62 @@ namespace VidyaOSServices.Services
                 $"Leave {req.Action.ToLower()} successfully."
             );
         }
-        public async Task<ApiResult<object>> GenerateMonthlyFeeAsync(
-    GenerateMonthlyFeeRequest req)
+        public async Task<ApiResult<string>> GenerateMonthlyFeesAsync(
+    int schoolId,
+    string feeMonth   // format: yyyy-MM
+)
         {
-            if (req.Month < 1 || req.Month > 12)
-                return ApiResult<object>.Fail("Invalid month.");
+            if (schoolId <= 0 || string.IsNullOrWhiteSpace(feeMonth))
+                return ApiResult<string>.Fail("Invalid input.");
 
-            string feeMonth = $"{req.Year}-{req.Month:D2}";
-
-            var feeStructures = await _context.FeeStructures
-                .Where(f => f.SchoolId == req.SchoolId && f.IsActive == true)
+            // 1️⃣ Load all active students
+            var students = await _context.Students
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.IsActive == true)
                 .ToListAsync();
 
-            if (!feeStructures.Any())
-                return ApiResult<object>.Fail("No fee structures found.");
-
-            int generated = 0;
-            int skipped = 0;
-
-            foreach (var fee in feeStructures)
+            foreach (var student in students)
             {
-                var students = await _context.Students
-                    .Where(s =>
-                        s.SchoolId == req.SchoolId &&
-                        s.ClassId == fee.ClassId &&
-                        s.IsActive == true)
-                    .ToListAsync();
+                // 2️⃣ Skip if fee already generated
+                bool exists = await _context.StudentFees.AnyAsync(f =>
+                    f.StudentId == student.StudentId &&
+                    f.FeeMonth == feeMonth);
 
-                foreach (var student in students)
+                if (exists)
+                    continue;
+
+                // 3️⃣ Find fee structure
+                var feeStructure = await _context.FeeStructures
+                    .FirstOrDefaultAsync(f =>
+                        f.SchoolId == schoolId &&
+                        f.ClassId == student.ClassId &&
+                        f.IsActive == true &&
+                        (
+                            student.ClassId < 11 ||
+                            f.StreamId == student.StreamId
+                        )
+                    );
+
+                if (feeStructure == null)
+                    continue;
+
+                // 4️⃣ Create student fee
+                _context.StudentFees.Add(new StudentFee
                 {
-                    bool exists = await _context.StudentFees.AnyAsync(sf =>
-                        sf.StudentId == student.StudentId &&
-                        sf.FeeMonth == feeMonth);
-
-                    if (exists)
-                    {
-                        skipped++;
-                        continue;
-                    }
-
-                    _context.StudentFees.Add(new StudentFee
-                    {
-                        StudentId = student.StudentId,
-                        FeeMonth = feeMonth,
-                        Amount = fee.MonthlyAmount,
-                        Status = "Pending"
-                    });
-
-                    generated++;
-                }
+                    StudentId = student.StudentId,
+                    FeeMonth = feeMonth,
+                    Amount = feeStructure.MonthlyAmount,
+                    Status = "Pending"
+                });
             }
 
             await _context.SaveChangesAsync();
 
-            return ApiResult<object>.Ok(
-                new
-                {
-                    FeeMonth = feeMonth,
-                    FeesGenerated = generated,
-                    Skipped = skipped
-                },
-                "Monthly fee generated successfully."
-            );
+            return ApiResult<string>.Ok("Fees generated successfully.");
         }
+
+
         public async Task<ApiResult<List<PendingFeeResponse>>> GetPendingFeesAsync(
     int schoolId)
         {
@@ -524,14 +512,14 @@ namespace VidyaOSServices.Services
         public async Task<ApiResult<CollectFeesResponse>> CollectFeesAsync(
     CollectFeesRequest req)
         {
-            // ---------- VALIDATION ----------
             if (req.StudentId <= 0 || req.SchoolId <= 0)
-                return ApiResult<CollectFeesResponse>.Fail("Invalid student or school.");
+                return ApiResult<CollectFeesResponse>
+                    .Fail("Invalid student or school.");
 
             if (req.FeeMonths == null || !req.FeeMonths.Any())
-                return ApiResult<CollectFeesResponse>.Fail("Select at least one fee month.");
+                return ApiResult<CollectFeesResponse>
+                    .Fail("Select at least one fee month.");
 
-            // ---------- FETCH FEES ----------
             var fees = await _context.StudentFees
                 .Where(f =>
                     f.StudentId == req.StudentId &&
@@ -540,11 +528,11 @@ namespace VidyaOSServices.Services
                 .ToListAsync();
 
             if (!fees.Any())
-                return ApiResult<CollectFeesResponse>.Fail("No pending fees found.");
+                return ApiResult<CollectFeesResponse>
+                    .Fail("No pending fees found.");
 
             decimal totalAmount = fees.Sum(f => f.Amount ?? 0);
 
-            // ---------- MARK AS PAID ----------
             foreach (var fee in fees)
             {
                 fee.Status = "Paid";
@@ -554,14 +542,12 @@ namespace VidyaOSServices.Services
 
             await _context.SaveChangesAsync();
 
-            // ---------- RECEIPT NO ----------
             var school = await _context.Schools
                 .FirstAsync(s => s.SchoolId == req.SchoolId);
 
             string receiptNo =
                 $"{school.SchoolCode}/{DateTime.UtcNow:yyyy}/{fees.First().StudentFeeId}";
 
-            // ---------- RESPONSE ----------
             return ApiResult<CollectFeesResponse>.Ok(
                 new CollectFeesResponse
                 {
@@ -575,27 +561,49 @@ namespace VidyaOSServices.Services
             );
         }
 
+
         public async Task<ApiResult<FeeStructureResponse>> SaveFeeStructureAsync(
-    FeeStructureRequest req)
+     FeeStructureRequest req)
         {
+            // 🔴 BASIC VALIDATIONS
             if (req == null)
                 return ApiResult<FeeStructureResponse>.Fail("Request is required.");
 
+            if (req.SchoolId <= 0)
+                return ApiResult<FeeStructureResponse>.Fail("Invalid school.");
+
+            if (req.ClassId <= 0)
+                return ApiResult<FeeStructureResponse>.Fail("Invalid class.");
+
+            if (string.IsNullOrWhiteSpace(req.FeeName))
+                return ApiResult<FeeStructureResponse>.Fail("Fee name is required.");
+
             if (req.MonthlyAmount <= 0)
+                return ApiResult<FeeStructureResponse>.Fail("Monthly amount must be greater than zero.");
+
+            // 🔴 STREAM RULE
+            // Class 11 & 12 → stream REQUIRED
+            if ((req.ClassId == 11 || req.ClassId == 12) && req.StreamId == null)
                 return ApiResult<FeeStructureResponse>.Fail(
-                    "Monthly amount must be greater than zero."
+                    "Stream is required for class 11 and 12."
                 );
 
+            // Class 1–10 → stream MUST be null
+            if (req.ClassId < 11)
+                req.StreamId = null;
+
+            // 🔍 CHECK EXISTING FEE (School + Class + Stream)
             var existingFee = await _context.FeeStructures
                 .FirstOrDefaultAsync(f =>
                     f.SchoolId == req.SchoolId &&
                     f.ClassId == req.ClassId &&
+                    f.StreamId == req.StreamId &&
                     f.IsActive == true
                 );
 
+            // 🔁 UPDATE
             if (existingFee != null)
             {
-                // 🔁 UPDATE
                 existingFee.FeeName = req.FeeName;
                 existingFee.MonthlyAmount = req.MonthlyAmount;
 
@@ -605,23 +613,26 @@ namespace VidyaOSServices.Services
                     new FeeStructureResponse
                     {
                         FeeStructureId = existingFee.FeeStructureId,
-                        ClassId = (int)existingFee.ClassId,
+                        ClassId = existingFee.ClassId!.Value,
+                        StreamId = existingFee.StreamId,
                         FeeName = existingFee.FeeName!,
-                        MonthlyAmount = (decimal)existingFee.MonthlyAmount,
+                        MonthlyAmount = existingFee.MonthlyAmount!.Value,
                         IsActive = true
                     },
                     "Fee structure updated successfully."
                 );
             }
 
-            // ➕ CREATE
+            // ➕ CREATE NEW
             var fee = new FeeStructure
             {
                 SchoolId = req.SchoolId,
                 ClassId = req.ClassId,
+                StreamId = req.StreamId, // null for 1–10, value for 11–12
                 FeeName = req.FeeName,
                 MonthlyAmount = req.MonthlyAmount,
-                IsActive = true
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.FeeStructures.Add(fee);
@@ -631,14 +642,16 @@ namespace VidyaOSServices.Services
                 new FeeStructureResponse
                 {
                     FeeStructureId = fee.FeeStructureId,
-                    ClassId = (int)fee.ClassId,
+                    ClassId = fee.ClassId!.Value,
+                    StreamId = fee.StreamId,
                     FeeName = fee.FeeName!,
-                    MonthlyAmount = (decimal)fee.MonthlyAmount,
+                    MonthlyAmount = fee.MonthlyAmount!.Value,
                     IsActive = true
                 },
                 "Fee structure created successfully."
             );
         }
+
 
         public async Task<ApiResult<List<FeeStructureListResponse>>> GetFeeStructuresAsync(
     int schoolId)
@@ -684,6 +697,8 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<StudentFeeHistoryResponse>>.Ok(fees);
         }
+
+
         public async Task<ApiResult<FeeReceiptResponse>> GenerateFeeReceiptAsync(
     int studentId, string feeMonth)
         {
@@ -788,12 +803,340 @@ namespace VidyaOSServices.Services
             });
         }
 
+        public async Task<ApiResult<object>> GenerateRollNumbersAlphabeticallyAsync(
+             int schoolId, int classId, int sectionId)
+        {
+            var students = await _context.Students
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.ClassId == classId &&
+                    s.SectionId == sectionId &&
+                    s.IsActive == true)
+                .OrderBy(s => s.FirstName)
+                .ThenBy(s => s.LastName)
+                .ToListAsync();
+
+            if (!students.Any())
+                return ApiResult<object>.Fail("No students found.");
+
+            int roll = 1;
+            foreach (var student in students)
+            {
+                student.RollNo = roll++;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return ApiResult<object>.Ok(null,
+                "Roll numbers generated alphabetically.");
+        }
+        public async Task<ApiResult<string>> CreateClassTimetableAsync(
+    CreateTimetableRequest req)
+        {
+            if (req == null)
+                return ApiResult<string>.Fail("Request is required.");
+
+            // ⏱ Parse time
+            if (!TimeOnly.TryParse(req.StartTime, out var startTime))
+                return ApiResult<string>.Fail("Invalid start time.");
+
+            if (!TimeOnly.TryParse(req.EndTime, out var endTime))
+                return ApiResult<string>.Fail("Invalid end time.");
+
+            if (startTime >= endTime)
+                return ApiResult<string>.Fail(
+                    "Start time must be before end time."
+                );
+
+            // 📅 Effective date validation
+            if (req.EffectiveTo.HasValue &&
+                req.EffectiveFrom > req.EffectiveTo.Value)
+            {
+                return ApiResult<string>.Fail(
+                    "Effective From date cannot be after Effective To date."
+                );
+            }
+
+            // ❌ Period number duplicate check
+            bool periodExists = await _context.ClassTimetables.AnyAsync(t =>
+                t.SchoolId == req.SchoolId &&
+                t.ClassId == req.ClassId &&
+                t.SectionId == req.SectionId &&
+                t.DayOfWeek == req.DayOfWeek &&
+                t.PeriodNo == req.PeriodNo &&
+                t.AcademicYear == req.AcademicYear &&
+                t.IsActive
+            );
+
+            if (periodExists)
+                return ApiResult<string>.Fail(
+                    $"Period {req.PeriodNo} already exists for this day."
+                );
+
+            // ❌ Time overlap check (correct + academic year safe)
+            bool overlap = await _context.ClassTimetables.AnyAsync(t =>
+                t.SchoolId == req.SchoolId &&
+                t.ClassId == req.ClassId &&
+                t.SectionId == req.SectionId &&
+                t.DayOfWeek == req.DayOfWeek &&
+                t.AcademicYear == req.AcademicYear &&
+                t.IsActive &&
+                startTime < t.EndTime &&
+                endTime > t.StartTime
+            );
+
+            if (overlap)
+                return ApiResult<string>.Fail(
+                    "Timetable period overlaps with an existing period."
+                );
+
+            // ✅ Insert timetable
+            var timetable = new ClassTimetable
+            {
+                SchoolId = req.SchoolId,
+                ClassId = req.ClassId,
+                SectionId = req.SectionId,
+                SubjectId = req.SubjectId,
+
+                DayOfWeek = req.DayOfWeek,
+                PeriodNo = req.PeriodNo,
+
+                StartTime = startTime,
+                EndTime = endTime,
+
+                EffectiveFrom = req.EffectiveFrom,
+                EffectiveTo = req.EffectiveTo,
+                AcademicYear = req.AcademicYear,
+
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.ClassTimetables.Add(timetable);
+            await _context.SaveChangesAsync();
+
+            return ApiResult<string>.Ok(
+                "Class timetable created successfully."
+            );
+        }
 
 
+
+        public async Task<ApiResult<List<TimetableResponse>>> GetClassTimetableAsync(
+    int schoolId,
+    int classId,
+    int? sectionId,
+    string academicYear)
+        {
+            var timetable = await (
+                from t in _context.ClassTimetables
+                join s in _context.Subjects
+                    on new { t.SubjectId, t.ClassId }
+                    equals new { s.SubjectId, s.ClassId }
+
+                where
+                    t.SchoolId == schoolId &&
+                    t.ClassId == classId &&
+                    t.AcademicYear == academicYear &&
+                    t.IsActive == true &&
+                    s.IsActive==true &&
+                    s.SchoolId == schoolId &&
+                    (
+                        sectionId.HasValue
+                            ? t.SectionId == sectionId.Value
+                            : t.SectionId == null
+                    )
+
+                orderby t.DayOfWeek, t.PeriodNo
+
+                select new TimetableResponse
+                {
+                    TimetableId = t.TimetableId,
+                    DayOfWeek = t.DayOfWeek,
+                    PeriodNo = t.PeriodNo,
+                    StartTime = t.StartTime.ToString("hh:mm tt"),
+                    EndTime = t.EndTime.ToString("hh:mm tt"),
+                    SubjectName = s.SubjectName
+                }
+            ).ToListAsync();
+
+            return ApiResult<List<TimetableResponse>>.Ok(timetable);
+        }
+
+
+
+        public async Task<ApiResult<string>> AssignSubjectsToClassAsync(
+    AssignClassSubjectsRequest req)
+        {
+            if (req.SubjectIds == null || !req.SubjectIds.Any())
+                return ApiResult<string>.Fail("No subjects selected");
+
+            // 1️⃣ Fetch master subjects
+            var masterSubjects = await _context.MasterSubjects
+                .Where(ms =>
+                    ms.SchoolId == req.SchoolId &&
+                    req.SubjectIds.Contains(ms.MasterSubjectId))
+                .ToListAsync();
+
+            if (!masterSubjects.Any())
+                return ApiResult<string>.Fail("Master subjects not found");
+
+            // 2️⃣ Fetch existing subjects (IMPORTANT: NULL SAFE)
+            var existingSubjects = await _context.Subjects
+                .Where(s =>
+                    s.SchoolId == req.SchoolId &&
+                    s.ClassId == req.ClassId &&
+                    (
+                        (req.StreamId == null && s.StreamId == null) ||
+                        (req.StreamId != null && s.StreamId == req.StreamId)
+                    )
+                )
+                .ToListAsync();
+
+            var existingNames = existingSubjects
+                .Select(s => s.SubjectName)
+                .ToHashSet();
+
+            // 3️⃣ Insert ONLY missing subjects (NO DELETE)
+            var subjectsToInsert = masterSubjects
+                .Where(ms => !existingNames.Contains(ms.SubjectName))
+                .Select(ms => new Subject
+                {
+                    SchoolId = req.SchoolId,
+                    ClassId = req.ClassId,
+                    StreamId = req.StreamId,   // null for 1–10
+                    SubjectName = ms.SubjectName!,
+                    IsActive = true
+                })
+                .ToList();
+
+            if (subjectsToInsert.Any())
+            {
+                _context.Subjects.AddRange(subjectsToInsert);
+                await _context.SaveChangesAsync();
+            }
+
+            return ApiResult<string>.Ok("Subjects assigned successfully");
+        }
+
+
+        public async Task<ApiResult<List<SubjectAssignResponse>>>
+         GetSubjectsForClassAsync(int schoolId, int classId, int? streamId)
+        {
+            var masterSubjects = await _context.MasterSubjects
+                .Where(m =>
+                    m.SchoolId == schoolId &&
+                    m.IsActive==true &&
+                    (classId <= 10 || m.StreamId == streamId || m.StreamId == null))
+                .ToListAsync();
+
+            var assigned = await _context.Subjects
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.ClassId == classId &&
+                    (classId <= 10 || s.StreamId == streamId))
+                .ToListAsync();
+
+            var result = masterSubjects.Select(m => new SubjectAssignResponse
+            {
+                SubjectId = m.MasterSubjectId,
+                SubjectName = m.SubjectName,
+                Assigned = assigned.Any(a => a.SubjectName == m.SubjectName)
+            }).ToList();
+
+            return ApiResult<List<SubjectAssignResponse>>.Ok(result);
+        }
+        public async Task<ApiResult<List<MasterSubjectDto>>> GetMasterSubjectsAsync(int schoolId)
+        {
+            var subjects = await _context.MasterSubjects
+                .Where(ms => ms.SchoolId == schoolId && ms.IsActive == true)
+                .OrderBy(ms => ms.SubjectName)
+                .Select(ms => new MasterSubjectDto
+                {
+                    MasterSubjectId = ms.MasterSubjectId,
+                    SubjectName = ms.SubjectName
+                })
+                .ToListAsync();
+
+            return ApiResult<List<MasterSubjectDto>>.Ok(subjects);
+        }
+        public async Task<ApiResult<bool>> DeleteMasterSubjectAsync(int id)
+        {
+            var subject = await _context.MasterSubjects.FirstOrDefaultAsync(s => s.MasterSubjectId == id);
+
+            if (subject == null)
+                return ApiResult<bool>.Fail("Subject not found.");
+
+            var isAssigned = await _context.Subjects
+                .AnyAsync(s => s.SubjectId == id && s.IsActive==true);
+
+            if (isAssigned)
+            {
+                subject.IsActive = false; // 🔑 soft delete
+                await _context.SaveChangesAsync();
+
+                return ApiResult<bool>.Ok(true, "Subject disabled successfully.");
+            }
+
+            _context.MasterSubjects.Remove(subject);
+            await _context.SaveChangesAsync();
+
+            return ApiResult<bool>.Ok(true, "Subject deleted successfully.");
+        }
+
+        public async Task<ApiResult<string>> AddMasterSubjectAsync(AddMasterSubjectRequest req)
+        {
+            if (string.IsNullOrWhiteSpace(req.SubjectName))
+                return ApiResult<string>.Fail("Subject name is required");
+
+            bool exists = await _context.MasterSubjects.AnyAsync(ms =>
+                ms.SchoolId == req.SchoolId &&
+                ms.SubjectName == req.SubjectName);
+
+            if (exists)
+                return ApiResult<string>.Fail("Subject already exists");
+
+            var subject = new MasterSubject
+            {
+                SchoolId = req.SchoolId,
+                SubjectName = req.SubjectName.Trim(),
+                IsActive = true,
+                
+            };
+
+            _context.MasterSubjects.Add(subject);
+            await _context.SaveChangesAsync();
+
+            return ApiResult<string>.Ok("Master subject added successfully");
+        }
+        public async Task<ApiResult<List<SubjectDropdownDto>>>
+                GetSubjectsForClassSectionAsync(
+                    int schoolId,
+                    int classId,
+                    int? sectionId)
+        {
+            var subjects = await _context.Subjects
+                .Where(s =>
+                    s.SchoolId == schoolId &&
+                    s.ClassId == classId &&
+                    s.IsActive==true
+                )
+                .Select(s => new SubjectDropdownDto
+                {
+                    SubjectId = s.SubjectId,
+                    SubjectName = s.SubjectName
+                })
+                .Distinct()
+                .OrderBy(s => s.SubjectName)
+                .ToListAsync();
+
+            return ApiResult<List<SubjectDropdownDto>>.Ok(subjects);
+        }
 
 
     }
 }
+
 
 
 

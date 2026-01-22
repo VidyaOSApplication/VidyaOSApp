@@ -40,6 +40,10 @@ namespace VidyaOSServices.Services
     StudentRegisterRequest req)
         {
             // ---------- Validation ----------
+            if ((req.ClassId == 11 || req.ClassId == 12) && req.StreamId == null)
+            {
+                return ApiResult<StudentRegisterResponse>.Fail("Stream is required for class 11 and 12");
+            }
             if (req == null)
                 return ApiResult<StudentRegisterResponse>.Fail("Request cannot be null.");
 
@@ -161,6 +165,7 @@ namespace VidyaOSServices.Services
                     Dob = DateOnly.FromDateTime(req.DOB),
                     ClassId = req.ClassId,
                     SectionId = req.SectionId,
+                    StreamId = req.StreamId,
                     AcademicYear = req.AcademicYear,
                     AdmissionDate = DateOnly.FromDateTime(DateTime.UtcNow),
                     FatherName = req.FatherName,

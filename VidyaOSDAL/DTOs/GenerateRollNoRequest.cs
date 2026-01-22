@@ -6,13 +6,11 @@ using System.Threading.Tasks;
 
 namespace VidyaOSDAL.DTOs
 {
-    public class FeeStructureRequest
+    public class GenerateRollNoRequest
     {
         public int SchoolId { get; set; }
         public int ClassId { get; set; }
-        public int? StreamId { get; set; }
-        public string FeeName { get; set; } = "";
-        public decimal MonthlyAmount { get; set; }
+        public int SectionId { get; set; }
     }
 
 }

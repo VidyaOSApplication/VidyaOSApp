@@ -1,7 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using VidyaOSDAL.DTOs;
+using Microsoft.EntityFrameworkCore;
 
 namespace VidyaOSDAL.Models;
 
@@ -24,7 +23,15 @@ public partial class VidyaOsContext : DbContext
 
     public virtual DbSet<Class> Classes { get; set; }
 
+    public virtual DbSet<ClassSubject> ClassSubjects { get; set; }
+
+    public virtual DbSet<ClassTimetable> ClassTimetables { get; set; }
+
     public virtual DbSet<Exam> Exams { get; set; }
+
+    public virtual DbSet<ExamClass> ExamClasses { get; set; }
+
+    public virtual DbSet<ExamResultSummary> ExamResultSummaries { get; set; }
 
     public virtual DbSet<ExamSubject> ExamSubjects { get; set; }
 
@@ -36,6 +43,8 @@ public partial class VidyaOsContext : DbContext
 
     public virtual DbSet<LibraryBook> LibraryBooks { get; set; }
 
+    public virtual DbSet<MasterSubject> MasterSubjects { get; set; }
+
     public virtual DbSet<NotificationLog> NotificationLogs { get; set; }
 
     public virtual DbSet<School> Schools { get; set; }
@@ -43,6 +52,8 @@ public partial class VidyaOsContext : DbContext
     public virtual DbSet<SchoolCalendarEvent> SchoolCalendarEvents { get; set; }
 
     public virtual DbSet<Section> Sections { get; set; }
+
+    public virtual DbSet<Stream> Streams { get; set; }
 
     public virtual DbSet<Student> Students { get; set; }
 
@@ -65,19 +76,12 @@ public partial class VidyaOsContext : DbContext
     public virtual DbSet<TimeTable> TimeTables { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
-    public virtual DbSet<StudentRegisterResponse> StudentRegisterResponses { get; set; }
-
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        => optionsBuilder.UseSqlServer("Name=ConnectionStrings:DefaultConnection");
+    { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<StudentRegisterResponse>(entity =>
-        {
-            entity.HasNoKey();
-            entity.ToView(null); // important for stored procedures
-        });
         modelBuilder.Entity<AdmissionYearSequence>(entity =>
         {
             entity.HasKey(e => new { e.SchoolId, e.AdmissionYear }).HasName("PK__Admissio__88E0A12B90AFAD47");
@@ -107,20 +111,87 @@ public partial class VidyaOsContext : DbContext
             entity.Property(e => e.ClassName).HasMaxLength(20);
         });
 
+        modelBuilder.Entity<ClassSubject>(entity =>
+        {
+            entity.HasKey(e => e.ClassSubjectId).HasName("PK__ClassSub__79A973599D961451");
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getutcdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+        });
+
+        modelBuilder.Entity<ClassTimetable>(entity =>
+        {
+            entity.HasKey(e => e.TimetableId).HasName("PK__ClassTim__68413F604A7FF4CB");
+
+            entity.HasIndex(e => new { e.SchoolId, e.ClassId, e.SectionId, e.DayOfWeek, e.PeriodNo, e.AcademicYear }, "UX_ClassTimetable_Period").IsUnique();
+
+            entity.Property(e => e.AcademicYear).HasMaxLength(20);
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+        });
+
         modelBuilder.Entity<Exam>(entity =>
         {
-            entity.HasKey(e => e.ExamId).HasName("PK__Exams__297521C7BB99DC4A");
+            entity.HasKey(e => e.ExamId).HasName("PK__Exams__297521C7823E868C");
 
             entity.Property(e => e.AcademicYear).HasMaxLength(20);
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.ExamName).HasMaxLength(100);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("Draft");
+        });
+
+        modelBuilder.Entity<ExamClass>(entity =>
+        {
+            entity.HasKey(e => e.ExamClassId).HasName("PK__ExamClas__42309F5F242EED52");
+
+            entity.HasIndex(e => new { e.ExamId, e.ClassId }, "UX_Exam_Class").IsUnique();
+
+            entity.HasOne(d => d.Exam).WithMany(p => p.ExamClasses)
+                .HasForeignKey(d => d.ExamId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ExamClasses_Exam");
+        });
+
+        modelBuilder.Entity<ExamResultSummary>(entity =>
+        {
+            entity.HasKey(e => e.ResultId).HasName("PK__ExamResu__97690208C8345F2F");
+
+            entity.ToTable("ExamResultSummary");
+
+            entity.HasIndex(e => new { e.StudentId, e.ExamId }, "UX_Student_Exam_Result").IsUnique();
+
+            entity.Property(e => e.GeneratedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.Grade).HasMaxLength(10);
+            entity.Property(e => e.Percentage).HasColumnType("decimal(5, 2)");
+            entity.Property(e => e.ResultStatus).HasMaxLength(20);
         });
 
         modelBuilder.Entity<ExamSubject>(entity =>
         {
-            entity.HasKey(e => e.ExamSubjectId).HasName("PK__ExamSubj__C5C4E54D032BFE20");
+            entity.HasKey(e => e.ExamSubjectId).HasName("PK__ExamSubj__C5C4E54DAA53286C");
+
+            entity.HasIndex(e => new { e.ExamId, e.ClassId, e.SubjectId }, "UX_Exam_Class_Subject").IsUnique();
+
+            entity.HasOne(d => d.Exam).WithMany(p => p.ExamSubjects)
+                .HasForeignKey(d => d.ExamId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ExamSubjects_Exam");
+
+            entity.HasOne(d => d.Subject).WithMany(p => p.ExamSubjects)
+                .HasForeignKey(d => d.SubjectId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ExamSubjects_Subject");
         });
 
         modelBuilder.Entity<FeeStructure>(entity =>
@@ -162,6 +233,14 @@ public partial class VidyaOsContext : DbContext
             entity.Property(e => e.Isbn)
                 .HasMaxLength(50)
                 .HasColumnName("ISBN");
+        });
+
+        modelBuilder.Entity<MasterSubject>(entity =>
+        {
+            entity.HasKey(e => e.MasterSubjectId).HasName("PK__MasterSu__607F5CF4FA3F3696");
+
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.SubjectName).HasMaxLength(100);
         });
 
         modelBuilder.Entity<NotificationLog>(entity =>
@@ -217,6 +296,14 @@ public partial class VidyaOsContext : DbContext
             entity.Property(e => e.SectionName).HasMaxLength(10);
         });
 
+        modelBuilder.Entity<Stream>(entity =>
+        {
+            entity.HasKey(e => e.StreamId).HasName("PK__Streams__07C87A924187F0A7");
+
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.StreamName).HasMaxLength(50);
+        });
+
         modelBuilder.Entity<Student>(entity =>
         {
             entity.HasKey(e => e.StudentId).HasName("PK__Students__32C52B9950DA9478");
@@ -255,11 +342,14 @@ public partial class VidyaOsContext : DbContext
 
         modelBuilder.Entity<StudentMark>(entity =>
         {
-            entity.HasKey(e => e.StudentMarkId).HasName("PK__StudentM__1B7251FC90081D58");
+            entity.HasKey(e => e.StudentMarkId).HasName("PK__StudentM__1B7251FCE75F2F5F");
+
+            entity.HasIndex(e => new { e.StudentId, e.ExamId, e.SubjectId }, "UX_Student_Exam_Subject").IsUnique();
 
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
+            entity.Property(e => e.IsAbsent).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<StudyMaterial>(entity =>
@@ -277,8 +367,11 @@ public partial class VidyaOsContext : DbContext
 
         modelBuilder.Entity<Subject>(entity =>
         {
-            entity.HasKey(e => e.SubjectId).HasName("PK__Subjects__AC1BA3A855CC016A");
+            entity.HasKey(e => e.SubjectId).HasName("PK__Subjects__AC1BA3A84119C6CF");
 
+            entity.HasIndex(e => new { e.SchoolId, e.ClassId, e.StreamId, e.SubjectName }, "UX_Subject").IsUnique();
+
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.SubjectName).HasMaxLength(100);
         });
 

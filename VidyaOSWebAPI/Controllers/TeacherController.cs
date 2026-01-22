@@ -33,10 +33,11 @@ namespace VidyaOSWebAPI.Controllers
            [FromQuery] int schoolId,
            [FromQuery] int classId,
            [FromQuery] int sectionId,
+           [FromQuery] int streamId,
            [FromQuery] DateOnly date)
         {
             var result = await _teacherService
-                .GetStudentsForAttendanceAsync(schoolId, classId, sectionId, date);
+                .GetStudentsForAttendanceAsync(schoolId, classId, sectionId, date, streamId);
 
             return Ok(result);
         }

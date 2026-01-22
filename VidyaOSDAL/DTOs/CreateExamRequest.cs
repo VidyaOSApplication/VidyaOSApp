@@ -6,9 +6,12 @@ using System.Threading.Tasks;
 
 namespace VidyaOSDAL.DTOs
 {
-    public class GenerateMonthlyFeeRequest
+    public class CreateExamRequest
     {
         public int SchoolId { get; set; }
-        public string FeeMonth { get; set; } = string.Empty;
+        public string ExamName { get; set; } = "";
+        public string AcademicYear { get; set; } = "";
+        public List<int> ClassIds { get; set; } = new();
     }
+
 }

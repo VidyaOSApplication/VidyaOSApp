@@ -108,14 +108,28 @@ namespace VidyaOSServices.Services
         }
 
         public async Task<AttendanceFetchResponse> GetStudentsForAttendanceAsync(
-            int schoolId, int classId, int sectionId, DateOnly date)
+    int schoolId,
+    int classId,
+    int sectionId,
+    DateOnly date,
+    int? streamId)
         {
-            var students = await _context.Students
+            // 🔐 Stream required only for 11–12
+            if ((classId == 11 || classId == 12) && streamId == null)
+                throw new Exception("Stream is required for class 11 and 12");
+
+            // 1️⃣ Fetch students (STREAM FILTER APPLIED HERE ONLY)
+            var studentQuery = _context.Students
                 .Where(s =>
                     s.SchoolId == schoolId &&
                     s.ClassId == classId &&
                     s.SectionId == sectionId &&
-                    s.IsActive == true)
+                    s.IsActive == true);
+
+            if (classId == 11 || classId == 12)
+                studentQuery = studentQuery.Where(s => s.StreamId == streamId);
+
+            var students = await studentQuery
                 .OrderBy(s => s.RollNo)
                 .Select(s => new
                 {
@@ -127,8 +141,21 @@ namespace VidyaOSServices.Services
                 })
                 .ToListAsync();
 
+            if (!students.Any())
+            {
+                return new AttendanceFetchResponse
+                {
+                    AttendanceDate = date,
+                    SchoolId = schoolId,
+                    ClassId = classId,
+                    SectionId = sectionId,
+                    Students = new List<AttendanceStudentDto>()
+                };
+            }
+
             var userIds = students.Select(s => s.UserId).ToList();
 
+            // 2️⃣ Approved leave
             var leaveUserIds = await _context.Leaves
                 .Where(l =>
                     l.SchoolId == schoolId &&
@@ -138,6 +165,7 @@ namespace VidyaOSServices.Services
                 .Select(l => l.UserId)
                 .ToListAsync();
 
+            // 3️⃣ Attendance (NO stream filtering here)
             var attendance = await _context.Attendances
                 .Where(a =>
                     a.SchoolId == schoolId &&
@@ -185,8 +213,15 @@ namespace VidyaOSServices.Services
             };
         }
 
+
+
         public async Task SaveAttendanceAsync(AttendanceMarkRequest req)
         {
+            // 🔐 Stream validation only for 11–12
+            if ((req.ClassId == 11 || req.ClassId == 12) && req.StreamId == null)
+                throw new Exception("Stream is required for class 11 and 12");
+
+            // 1️⃣ Approved leave
             var leaveUserIds = await _context.Leaves
                 .Where(l =>
                     l.SchoolId == req.SchoolId &&
@@ -198,7 +233,6 @@ namespace VidyaOSServices.Services
 
             foreach (var record in req.Records)
             {
-                // 🔒 Leave override safety
                 if (leaveUserIds.Contains(record.UserId))
                     continue;
 
@@ -227,6 +261,8 @@ namespace VidyaOSServices.Services
 
             await _context.SaveChangesAsync();
         }
-    } 
+
+
+    }
 }
 
