@@ -11,20 +11,19 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy solution and project files (for restore caching)
-COPY VidyaOSSol.sln .
+# Copy ONLY required project files
 COPY VidyaOSWebAPI/VidyaOSWebAPI.csproj VidyaOSWebAPI/
 COPY VidyaOSDAL/VidyaOSDAL.csproj VidyaOSDAL/
 COPY VidyaOSServices/VidyaOSServices.csproj VidyaOSServices/
 COPY VidyaOSHelper/VidyaOSHelper.csproj VidyaOSHelper/
 
-# Restore dependencies
-RUN dotnet restore VidyaOSSol.sln
+# Restore ONLY Web API (avoids ClientApp)
+RUN dotnet restore VidyaOSWebAPI/VidyaOSWebAPI.csproj
 
-# Copy the rest of the source code
+# Copy full source
 COPY . .
 
-# Publish ONLY the Web API project
+# Publish Web API
 RUN dotnet publish VidyaOSWebAPI/VidyaOSWebAPI.csproj \
     -c Release \
     -o /app/publish \
