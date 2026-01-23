@@ -15,7 +15,7 @@ namespace VidyaOSWebAPI
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // 🔥 REQUIRED FOR RENDER (dynamic PORT)
+            // 🔥 REQUIRED FOR RENDER (Dynamic PORT)
             builder.WebHost.ConfigureKestrel(options =>
             {
                 options.ListenAnyIP(
@@ -59,23 +59,25 @@ namespace VidyaOSWebAPI
 
             builder.Services.AddAuthorization();
 
-            // 🔥 CORS FOR NETLIFY + LOCAL DEV
+            // 🔥 CORS CONFIGURATION (IMPORTANT)
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowFrontend", policy =>
                 {
                     policy
                         .WithOrigins(
-                            "http://localhost:8100",        // Ionic local
-                            "http://localhost:4200",        // Angular local
-                            "https://your-app.netlify.app"  // 🔥 Netlify PROD (CHANGE THIS)
+                            "http://localhost:8100",             // Ionic local
+                            "http://localhost:4200",             // Angular local
+                            "https://vidyaosapp.netlify.app",    // 🔥 CHANGE TO YOUR REAL FRONTEND URL
+                            "https://vidyaosapp.onrender.com"    // If frontend hosted on Render
                         )
                         .AllowAnyHeader()
-                        .AllowAnyMethod();
+                        .AllowAnyMethod()
+                        .AllowCredentials();
                 });
             });
 
-            // Swagger (enable for prod also)
+            // Swagger
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
@@ -96,32 +98,16 @@ namespace VidyaOSWebAPI
 
             // -------------------- MIDDLEWARE --------------------
 
-            // Swagger for DEV + PROD (safe for APIs)
-            if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
-            {
-                app.UseSwagger();
-                app.UseSwaggerUI();
-            }
+            app.UseSwagger();
+            app.UseSwaggerUI();
 
             app.UseHttpsRedirection();
 
             app.UseRouting();
 
-            // 🔥 CORS BEFORE AUTH
+            // 🔥 VERY IMPORTANT: CORS BEFORE AUTH
             app.UseCors("AllowFrontend");
 
-            // 🔥 HANDLE PREFLIGHT (OPTIONS) REQUESTS
-            app.Use(async (context, next) =>
-            {
-                if (context.Request.Method == HttpMethods.Options)
-                {
-                    context.Response.StatusCode = StatusCodes.Status200OK;
-                    return;
-                }
-                await next();
-            });
-
-            // AUTH
             app.UseAuthentication();
             app.UseAuthorization();
 
