@@ -34,7 +34,8 @@ namespace VidyaOSWebAPI
                 )
             );
 
-            // JWT Authentication
+            // -------------------- JWT AUTH --------------------
+
             builder.Services
                 .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
@@ -59,21 +60,20 @@ namespace VidyaOSWebAPI
 
             builder.Services.AddAuthorization();
 
-            // 🔥 CORS CONFIGURATION (IMPORTANT)
+            // -------------------- CORS --------------------
+
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowFrontend", policy =>
                 {
                     policy
                         .WithOrigins(
-                            "http://localhost:8100",             // Ionic local
-                            "http://localhost:4200",             // Angular local
-                            "https://vidyaosapp.netlify.app",    // 🔥 CHANGE TO YOUR REAL FRONTEND URL
-                            "https://vidyaosapp.onrender.com"    // If frontend hosted on Render
+                            "http://localhost:8100",           // Ionic local
+                            "http://localhost:4200",           // Angular local
+                            "https://vidyaosapp.netlify.app"   // Production frontend
                         )
                         .AllowAnyHeader()
-                        .AllowAnyMethod()
-                        .AllowCredentials();
+                        .AllowAnyMethod();
                 });
             });
 
@@ -81,7 +81,8 @@ namespace VidyaOSWebAPI
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
-            // Dependency Injection
+            // -------------------- DEPENDENCY INJECTION --------------------
+
             builder.Services.AddScoped<StudentService>();
             builder.Services.AddScoped<SchoolService>();
             builder.Services.AddScoped<TeacherService>();
@@ -102,8 +103,6 @@ namespace VidyaOSWebAPI
             app.UseSwaggerUI();
 
             app.UseHttpsRedirection();
-
-            app.UseRouting();
 
             // 🔥 VERY IMPORTANT: CORS BEFORE AUTH
             app.UseCors("AllowFrontend");
