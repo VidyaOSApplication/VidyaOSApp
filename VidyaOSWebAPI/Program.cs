@@ -15,29 +15,20 @@ namespace VidyaOSWebAPI
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // 🔥 REQUIRED FOR RENDER (Dynamic PORT)
-            builder.WebHost.ConfigureKestrel(options =>
-            {
-                options.ListenAnyIP(
-                    int.Parse(Environment.GetEnvironmentVariable("PORT") ?? "8080")
-                );
-            });
-
             // -------------------- SERVICES --------------------
 
+            // Controllers
             builder.Services.AddControllers();
 
-            // Database
+            // DbContext
             builder.Services.AddDbContext<VidyaOsContext>(options =>
                 options.UseSqlServer(
                     builder.Configuration.GetConnectionString("DefaultConnection")
                 )
             );
 
-            // -------------------- JWT AUTH --------------------
-
-            builder.Services
-                .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            // JWT Authentication
+            builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
                     options.TokenValidationParameters = new TokenValidationParameters
@@ -53,27 +44,28 @@ namespace VidyaOSWebAPI
                             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
                         ),
 
+                        // 🔥 REQUIRED FOR ROLE-BASED AUTH
                         RoleClaimType = ClaimTypes.Role,
                         NameClaimType = ClaimTypes.NameIdentifier
                     };
                 });
 
+            // 🔥 REQUIRED for [Authorize(Roles = "...")]
             builder.Services.AddAuthorization();
 
-            // -------------------- CORS --------------------
-
+            // CORS (Ionic / Angular)
             builder.Services.AddCors(options =>
             {
-                options.AddPolicy("AllowFrontend", policy =>
+                options.AddPolicy("AllowIonicApp", policy =>
                 {
                     policy
                         .WithOrigins(
-                            "http://localhost:8100",           // Ionic local
-                            "http://localhost:4200",           // Angular local
-                            "https://vidyaosapp.netlify.app"   // Production frontend
+                            "http://localhost:8100", // Ionic
+                            "http://localhost:4200"  // Angular (optional)
                         )
                         .AllowAnyHeader()
-                        .AllowAnyMethod();
+                        .AllowAnyMethod()
+                        .AllowCredentials();
                 });
             });
 
@@ -81,8 +73,7 @@ namespace VidyaOSWebAPI
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
-            // -------------------- DEPENDENCY INJECTION --------------------
-
+            // Dependency Injection
             builder.Services.AddScoped<StudentService>();
             builder.Services.AddScoped<SchoolService>();
             builder.Services.AddScoped<TeacherService>();
@@ -99,15 +90,34 @@ namespace VidyaOSWebAPI
 
             // -------------------- MIDDLEWARE --------------------
 
-            app.UseSwagger();
-            app.UseSwaggerUI();
+            if (app.Environment.IsDevelopment())
+            {
+                app.UseSwagger();
+                app.UseSwaggerUI();
+            }
 
             app.UseHttpsRedirection();
 
-            // 🔥 VERY IMPORTANT: CORS BEFORE AUTH
-            app.UseCors("AllowFrontend");
+            app.UseRouting();
 
+            // 🔥 CORS MUST RUN BEFORE AUTH
+            app.UseCors("AllowIonicApp");
+
+            // 🔥 ALLOW PREFLIGHT (OPTIONS) REQUESTS — PRODUCTION SAFE
+            app.Use(async (context, next) =>
+            {
+                if (context.Request.Method == HttpMethods.Options)
+                {
+                    context.Response.StatusCode = StatusCodes.Status200OK;
+                    return;
+                }
+                await next();
+            });
+
+            // 🔥 AUTHENTICATION FIRST
             app.UseAuthentication();
+
+            // 🔥 AUTHORIZATION SECOND
             app.UseAuthorization();
 
             app.MapControllers();
