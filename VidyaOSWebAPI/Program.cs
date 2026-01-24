@@ -17,10 +17,8 @@ namespace VidyaOSWebAPI
 
             // -------------------- SERVICES --------------------
 
-            // Controllers
             builder.Services.AddControllers();
 
-            // DbContext
             builder.Services.AddDbContext<VidyaOsContext>(options =>
                 options.UseSqlServer(
                     builder.Configuration.GetConnectionString("DefaultConnection")
@@ -44,24 +42,24 @@ namespace VidyaOSWebAPI
                             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
                         ),
 
-                        // 🔥 REQUIRED FOR ROLE-BASED AUTH
                         RoleClaimType = ClaimTypes.Role,
                         NameClaimType = ClaimTypes.NameIdentifier
                     };
                 });
 
-            // 🔥 REQUIRED for [Authorize(Roles = "...")]
             builder.Services.AddAuthorization();
 
-            // CORS (Ionic / Angular)
+            // 🔥 UPDATED CORS POLICY
             builder.Services.AddCors(options =>
             {
-                options.AddPolicy("AllowIonicApp", policy =>
+                options.AddPolicy("AllowFrontendApps", policy =>
                 {
                     policy
                         .WithOrigins(
-                            "http://localhost:8100", // Ionic
-                            "http://localhost:4200"  // Angular (optional)
+                            "http://localhost:8100",   // Ionic
+                            "http://localhost:4200",   // Angular
+                            "http://localhost:8081",   // Expo Web
+                            "http://localhost:19006"   // Expo older web port
                         )
                         .AllowAnyHeader()
                         .AllowAnyMethod()
@@ -69,9 +67,35 @@ namespace VidyaOSWebAPI
                 });
             });
 
-            // Swagger
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                {
+                    Name = "Authorization",
+                    Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+                    Scheme = "bearer",
+                    BearerFormat = "JWT",
+                    In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+                    Description = "Enter: Bearer {your JWT token}"
+                });
+
+                options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+            });
+
 
             // Dependency Injection
             builder.Services.AddScoped<StudentService>();
@@ -100,24 +124,10 @@ namespace VidyaOSWebAPI
 
             app.UseRouting();
 
-            // 🔥 CORS MUST RUN BEFORE AUTH
-            app.UseCors("AllowIonicApp");
+            // 🔥 CORS MUST COME BEFORE AUTH
+            app.UseCors("AllowFrontendApps");
 
-            // 🔥 ALLOW PREFLIGHT (OPTIONS) REQUESTS — PRODUCTION SAFE
-            app.Use(async (context, next) =>
-            {
-                if (context.Request.Method == HttpMethods.Options)
-                {
-                    context.Response.StatusCode = StatusCodes.Status200OK;
-                    return;
-                }
-                await next();
-            });
-
-            // 🔥 AUTHENTICATION FIRST
             app.UseAuthentication();
-
-            // 🔥 AUTHORIZATION SECOND
             app.UseAuthorization();
 
             app.MapControllers();
