@@ -49,21 +49,23 @@ namespace VidyaOSWebAPI
 
             builder.Services.AddAuthorization();
 
-            // 🔥 UPDATED CORS POLICY
+            // 🔥 FINALIZED CORS POLICY FOR MOBILE & WEB
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowFrontendApps", policy =>
                 {
                     policy
                         .WithOrigins(
-                            "http://localhost:8100",   // Ionic
-                            "http://localhost:4200",   // Angular
+                            "http://localhost:8100",   // Ionic Browser
+                            "http://localhost:4200",   // Angular Browser
+                            "https://localhost",      // Capacitor Android/iOS (High Priority)
+                            "http://localhost",       // Capacitor Android (Fallback)
                             "http://localhost:8081",   // Expo Web
                             "http://localhost:19006"   // Expo older web port
                         )
                         .AllowAnyHeader()
                         .AllowAnyMethod()
-                        .AllowCredentials();
+                        .AllowCredentials(); // Required if you use Cookies/Sessions
                 });
             });
 
@@ -81,19 +83,19 @@ namespace VidyaOSWebAPI
                 });
 
                 options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
-    {
-        {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
                 {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            new string[] {}
-        }
-    });
+                    {
+                        new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                        {
+                            Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                            {
+                                Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                                Id = "Bearer"
+                            }
+                        },
+                        new string[] {}
+                    }
+                });
             });
 
 
@@ -114,6 +116,8 @@ namespace VidyaOSWebAPI
 
             // -------------------- MIDDLEWARE --------------------
 
+            // Swagger should be available in Prod for your testing if needed, 
+            // otherwise wrap in if (app.Environment.IsDevelopment())
             app.UseSwagger();
             app.UseSwaggerUI();
 
@@ -121,7 +125,7 @@ namespace VidyaOSWebAPI
 
             app.UseRouting();
 
-            // 🔥 CORS MUST COME BEFORE AUTH
+            // 🔥 CORS MUST COME BEFORE AUTHENTICATION
             app.UseCors("AllowFrontendApps");
 
             app.UseAuthentication();
