@@ -115,7 +115,7 @@ namespace VidyaOSWebAPI.Controllers
         [HttpPost]
         [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> GenerateMonthlyFee(
-    [FromBody] GenerateMonthlyFeeRequest request)
+        [FromBody] GenerateMonthlyFeeRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.FeeMonth))
                 return BadRequest("Invalid request");

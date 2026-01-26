@@ -429,19 +429,14 @@ namespace VidyaOSServices.Services
                 $"Leave {req.Action.ToLower()} successfully."
             );
         }
-        public async Task<ApiResult<string>> GenerateMonthlyFeesAsync(
-    int schoolId,
-    string feeMonth   // format: yyyy-MM
-)
+        public async Task<ApiResult<string>> GenerateMonthlyFeesAsync(int schoolId, string feeMonth)
         {
             if (schoolId <= 0 || string.IsNullOrWhiteSpace(feeMonth))
                 return ApiResult<string>.Fail("Invalid input.");
 
             // 1️⃣ Load all active students
             var students = await _context.Students
-                .Where(s =>
-                    s.SchoolId == schoolId &&
-                    s.IsActive == true)
+                .Where(s => s.SchoolId == schoolId && s.IsActive == true)
                 .ToListAsync();
 
             foreach (var student in students)
@@ -451,18 +446,20 @@ namespace VidyaOSServices.Services
                     f.StudentId == student.StudentId &&
                     f.FeeMonth == feeMonth);
 
-                if (exists)
-                    continue;
+                if (exists) continue;
 
                 // 3️⃣ Find fee structure
+                // We define what a "Senior Class" is to handle IDs 13, 14, 15 correctly
+                bool isSenior = (student.ClassId == 11 || student.ClassId == 12);
+
                 var feeStructure = await _context.FeeStructures
                     .FirstOrDefaultAsync(f =>
                         f.SchoolId == schoolId &&
                         f.ClassId == student.ClassId &&
                         f.IsActive == true &&
                         (
-                            student.ClassId < 11 ||
-                            f.StreamId == student.StreamId
+                            !isSenior || // If NOT 11 or 12, don't worry about StreamId
+                            f.StreamId == student.StreamId // If 11 or 12, match the StreamId
                         )
                     );
 
@@ -480,7 +477,6 @@ namespace VidyaOSServices.Services
             }
 
             await _context.SaveChangesAsync();
-
             return ApiResult<string>.Ok("Fees generated successfully.");
         }
 
