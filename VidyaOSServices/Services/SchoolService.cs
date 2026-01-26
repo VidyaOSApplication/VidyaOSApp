@@ -746,24 +746,32 @@ namespace VidyaOSServices.Services
         public async Task<ApiResult<List<StudentListDto>>> GetStudentsByClassSectionAsync(
     int schoolId,
     int classId,
-    int sectionId)
+    int sectionId,
+    int? streamId = null)
         {
-            var students = await _context.Students
-                .Where(s =>
-                    s.SchoolId == schoolId &&
-                    s.ClassId == classId &&
-                    s.SectionId == sectionId &&
-                    s.IsActive == true
-                )
-                .OrderBy(s => s.RollNo)
-                .Select(s => new StudentListDto
+            var students = await (
+                from s in _context.Students
+                    // Left Join with Streams
+                join st in _context.Streams on s.StreamId equals st.StreamId into streamJoin
+                from st in streamJoin.DefaultIfEmpty()
+
+                where s.SchoolId == schoolId &&
+                      s.ClassId == classId &&
+                      s.SectionId == sectionId &&
+                      s.IsActive == true &&
+                      (!streamId.HasValue || s.StreamId == streamId)
+
+                orderby s.RollNo
+                select new StudentListDto
                 {
                     StudentId = s.StudentId,
                     AdmissionNo = s.AdmissionNo!,
                     FullName = s.FirstName + " " + s.LastName,
-                    RollNo = s.RollNo ?? 0
-                })
-                .ToListAsync();
+                    RollNo = s.RollNo ?? 0,
+                    // Only provide stream name if it exists (for 11 & 12)
+                    StreamName = st != null ? st.StreamName : null
+                }
+            ).ToListAsync();
 
             return ApiResult<List<StudentListDto>>.Ok(students);
         }

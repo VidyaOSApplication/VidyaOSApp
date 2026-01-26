@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.IO;
 using VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
 using VidyaOSServices.Services;
@@ -168,10 +169,11 @@ namespace VidyaOSWebAPI.Controllers
         public async Task<IActionResult> GetStudentsByClassSection(
             int schoolId,
             int classId,
-            int sectionId)
+            int sectionId,
+            int? streamId = null)
         {
             var result = await _schoolService.GetStudentsByClassSectionAsync(
-                schoolId, classId, sectionId);
+                schoolId, classId, sectionId,streamId );
 
             return Ok(result);
         }

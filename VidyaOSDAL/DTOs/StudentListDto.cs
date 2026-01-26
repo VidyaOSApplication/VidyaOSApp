@@ -12,5 +12,6 @@ namespace VidyaOSDAL.DTOs
         public string AdmissionNo { get; set; } = "";
         public string FullName { get; set; } = "";
         public int RollNo { get; set; }
+        public string? StreamName { get; set; }
     }
 }
