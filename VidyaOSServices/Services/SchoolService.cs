@@ -23,67 +23,91 @@ namespace VidyaOSServices.Services
             _context = context;
             _schoolHelper = schoolHelper;
         }
-        public async Task<ApiResult<RegisterSchoolResponse>> RegisterSchoolAsync(
-    RegisterSchoolRequest req)
+        public async Task<ApiResult<RegisterSchoolResponse>> RegisterSchoolAsync(RegisterSchoolRequest req)
         {
             using var tx = await _context.Database.BeginTransactionAsync();
 
             try
             {
-                // ---------- VALIDATION ----------
+                // 1. ---------- ESSENTIAL VALIDATION ----------
                 if (string.IsNullOrWhiteSpace(req.SchoolName))
                     return ApiResult<RegisterSchoolResponse>.Fail("School name is required.");
-
-                if (string.IsNullOrWhiteSpace(req.SchoolCode))
-                    return ApiResult<RegisterSchoolResponse>.Fail("School code is required.");
 
                 if (string.IsNullOrWhiteSpace(req.AdminUsername))
                     return ApiResult<RegisterSchoolResponse>.Fail("Admin username is required.");
 
-                if (string.IsNullOrWhiteSpace(req.AdminPassword))
-                    return ApiResult<RegisterSchoolResponse>.Fail("Admin password is required.");
+                // Generate School Code if not provided
+                var schoolCode = string.IsNullOrWhiteSpace(req.SchoolCode)
+                    ? req.SchoolName.Substring(0, Math.Min(3, req.SchoolName.Length)).ToUpper() + new Random().Next(100, 999)
+                    : req.SchoolCode.Trim().ToUpper();
 
-                if (!Regex.IsMatch(req.Phone, @"^[6-9]\d{9}$"))
-                    return ApiResult<RegisterSchoolResponse>.Fail("Invalid phone number.");
-
-                // ---------- DUPLICATE CHECKS ----------
-                if (await _context.Schools.AnyAsync(s => s.SchoolCode == req.SchoolCode))
+                if (await _context.Schools.AnyAsync(s => s.SchoolCode == schoolCode))
                     return ApiResult<RegisterSchoolResponse>.Fail("School code already exists.");
 
-                if (await _context.Users.AnyAsync(u => u.Username == req.AdminUsername))
-                    return ApiResult<RegisterSchoolResponse>.Fail("Admin username already exists.");
-
-                // ---------- CREATE SCHOOL ----------
+                // 2. ---------- CREATE SCHOOL PROFILE ----------
                 var school = new School
                 {
                     SchoolName = req.SchoolName.Trim(),
-                    SchoolCode = req.SchoolCode.Trim().ToUpper(),
-                    RegistrationNumber = req.RegistrationNumber,
-                    YearOfFoundation = req.YearOfFoundation,
+                    SchoolCode = schoolCode,
                     BoardType = req.BoardType,
-                    AffiliationNumber = req.AffiliationNumber,
-                    Email = req.Email,
                     Phone = req.Phone,
-                    AddressLine1 = req.AddressLine1,
+                    Email = req.Email,
                     City = req.City,
                     State = req.State,
-                    Pincode = req.Pincode,
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
                 };
 
                 _context.Schools.Add(school);
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync(); // Generates SchoolId
 
-                // ---------- CREATE ADMIN USER ----------
+                // 3. ---------- AUTO-SEED INFRASTRUCTURE ----------
+                var classDefs = new List<(int Id, string Name)>
+        {
+            (15, "Nursery"), (13, "LKG"), (14, "UKG"),
+            (1, "Class 1"), (2, "Class 2"), (3, "Class 3"), (4, "Class 4"),
+            (5, "Class 5"), (6, "Class 6"), (7, "Class 7"), (8, "Class 8"),
+            (9, "Class 9"), (10, "Class 10"), (11, "Class 11"), (12, "Class 12")
+        };
+
+                foreach (var cls in classDefs)
+                {
+                    // A. Create Class
+                    _context.Classes.Add(new Class
+                    {
+                        SchoolId = school.SchoolId,
+                        ClassId = cls.Id,
+                        ClassName = cls.Name,
+                        IsActive = true
+                    });
+
+                    // B. Create Sections A (ID 1) and B (ID 2)
+                    _context.Sections.AddRange(
+                        new Section { SchoolId = school.SchoolId, ClassId = cls.Id, SectionId = 1, SectionName = "A", IsActive = true },
+                        new Section { SchoolId = school.SchoolId, ClassId = cls.Id, SectionId = 2, SectionName = "B", IsActive = true }
+                    );
+
+                    // C. Create Streams for Class 11 and 12
+                    if (cls.Id == 11 || cls.Id == 12)
+                    {
+                        _context.Streams.AddRange(
+                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "PCM" },
+                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "PCB" },
+                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "Commerce" },
+                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "Arts" }
+                        );
+                    }
+                }
+
+                // 4. ---------- CREATE ADMIN USER ----------
                 var adminUser = new User
                 {
-                    SchoolId = school.SchoolId, // 🔥 RELATION
+                    SchoolId = school.SchoolId,
                     Username = req.AdminUsername.Trim().ToLower(),
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.AdminPassword),
                     Role = "SchoolAdmin",
-                    Email = req.Email,
                     Phone = req.Phone,
+                    Email = req.Email,
                     IsFirstLogin = true,
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
@@ -94,23 +118,18 @@ namespace VidyaOSServices.Services
 
                 await tx.CommitAsync();
 
-                return ApiResult<RegisterSchoolResponse>.Ok(
-                    new RegisterSchoolResponse
-                    {
-                        SchoolId = school.SchoolId,
-                        SchoolName = school.SchoolName!,      // ✅ FIX
-                        SchoolCode = school.SchoolCode!,
-                        AdminUserId = adminUser.UserId,
-                        AdminUsername = adminUser.Username!,
-                        CreatedAt = school.CreatedAt!.Value
-                    },
-                    "School registered successfully."
-                );
+                return ApiResult<RegisterSchoolResponse>.Ok(new RegisterSchoolResponse
+                {
+                    SchoolId = school.SchoolId,
+                    SchoolName = school.SchoolName,
+                    AdminUsername = adminUser.Username
+                }, "School registered and classroom environment initialized.");
             }
-            catch
+            catch (Exception ex)
             {
                 await tx.RollbackAsync();
-                throw;
+                // Log the actual exception here
+                return ApiResult<RegisterSchoolResponse>.Fail($"Registration failed: {ex.Message}");
             }
         }
 
@@ -463,7 +482,7 @@ namespace VidyaOSServices.Services
 
                 var structure = feeStructures.FirstOrDefault(f =>
                     f.ClassId == student.ClassId &&
-                    (!isSenior || f.StreamId == student.StreamId)
+                    (!isSenior || f.StreamId== student.StreamId)
                 );
 
                 if (structure != null)
