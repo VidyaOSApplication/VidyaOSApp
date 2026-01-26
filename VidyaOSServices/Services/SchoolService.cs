@@ -653,19 +653,28 @@ namespace VidyaOSServices.Services
         }
 
 
-        public async Task<ApiResult<List<FeeStructureListResponse>>> GetFeeStructuresAsync(
-    int schoolId)
+        public async Task<ApiResult<List<FeeStructureListResponse>>> GetFeeStructuresAsync(int schoolId)
         {
             var data = await (
                 from fs in _context.FeeStructures
-                join c in _context.Classes on fs.ClassId equals c.ClassId
+                    // Join Classes (Left Join)
+                join c in _context.Classes on fs.ClassId equals c.ClassId into classJoin
+                from c in classJoin.DefaultIfEmpty()
+
+                    // Join Streams (Left Join - very important)
+                join s in _context.Streams on fs.StreamId equals s.StreamId into streamJoin
+                from s in streamJoin.DefaultIfEmpty()
+
                 where fs.SchoolId == schoolId && fs.IsActive == true
-                orderby c.ClassName
+                orderby fs.ClassId
+
                 select new FeeStructureListResponse
                 {
                     FeeStructureId = fs.FeeStructureId,
                     ClassId = (int)fs.ClassId,
-                    ClassName = c.ClassName!,
+                    StreamId = fs.StreamId, // Mapping the ID to the response
+                    ClassName = c != null ? c.ClassName : "Class " + fs.ClassId,
+                    StreamName = s != null ? s.StreamName : "", // Mapping the Name
                     FeeName = fs.FeeName!,
                     MonthlyAmount = (decimal)fs.MonthlyAmount,
                     IsActive = fs.IsActive ?? false
