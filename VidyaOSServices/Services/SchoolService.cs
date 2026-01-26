@@ -11,6 +11,7 @@ using VidyaOSDAL.Models;
 using VidyaOSHelper.SchoolHelper;
 using static VidyaOSHelper.SchoolHelper.SchoolHelper;
 
+
 namespace VidyaOSServices.Services
 {
     public class SchoolService
@@ -434,50 +435,58 @@ namespace VidyaOSServices.Services
             if (schoolId <= 0 || string.IsNullOrWhiteSpace(feeMonth))
                 return ApiResult<string>.Fail("Invalid input.");
 
-            // 1️⃣ Load all active students
+            // 1️⃣ Fetch all active students and existing fee records for this month in one go
             var students = await _context.Students
                 .Where(s => s.SchoolId == schoolId && s.IsActive == true)
                 .ToListAsync();
 
+            var existingFeeStudentIds = await _context.StudentFees
+                    .Where(f => f.FeeMonth == feeMonth)
+                    .Select(f => (int)f.StudentId) // Explicitly cast to int
+                    .ToListAsync();
+
+            // 2️⃣ Fetch all active fee structures for the school
+            var feeStructures = await _context.FeeStructures
+                .Where(f => f.SchoolId == schoolId && f.IsActive == true)
+                .ToListAsync();
+
+            var newFees = new List<StudentFee>();
+
             foreach (var student in students)
             {
-                // 2️⃣ Skip if fee already generated
-                bool exists = await _context.StudentFees.AnyAsync(f =>
-                    f.StudentId == student.StudentId &&
-                    f.FeeMonth == feeMonth);
-
-                if (exists) continue;
-
-                // 3️⃣ Find fee structure
-                // We define what a "Senior Class" is to handle IDs 13, 14, 15 correctly
-                bool isSenior = (student.ClassId == 11 || student.ClassId == 12);
-
-                var feeStructure = await _context.FeeStructures
-                    .FirstOrDefaultAsync(f =>
-                        f.SchoolId == schoolId &&
-                        f.ClassId == student.ClassId &&
-                        f.IsActive == true &&
-                        (
-                            !isSenior || // If NOT 11 or 12, don't worry about StreamId
-                            f.StreamId == student.StreamId // If 11 or 12, match the StreamId
-                        )
-                    );
-
-                if (feeStructure == null)
+                // Skip if fee already exists (Checking in-memory list is much faster than DB)
+                if (existingFeeStudentIds.Contains(student.StudentId))
                     continue;
 
-                // 4️⃣ Create student fee
-                _context.StudentFees.Add(new StudentFee
+                // 3️⃣ Find the correct fee structure using the "Senior Class" fix
+                bool isSenior = (student.ClassId == 11 || student.ClassId == 12);
+
+                var structure = feeStructures.FirstOrDefault(f =>
+                    f.ClassId == student.ClassId &&
+                    (!isSenior || f.StreamId == student.StreamId)
+                );
+
+                if (structure != null)
                 {
-                    StudentId = student.StudentId,
-                    FeeMonth = feeMonth,
-                    Amount = feeStructure.MonthlyAmount,
-                    Status = "Pending"
-                });
+                    newFees.Add(new StudentFee
+                    {
+                        StudentId = student.StudentId,
+                        FeeMonth = feeMonth,
+                        Amount = structure.MonthlyAmount,
+                        Status = "Pending",
+                         // Good practice for tracking
+                    });
+                }
             }
 
-            await _context.SaveChangesAsync();
-            return ApiResult<string>.Ok("Fees generated successfully.");
+            // 4️⃣ Bulk Add and Save
+            if (newFees.Any())
+            {
+                _context.StudentFees.AddRange(newFees);
+                await _context.SaveChangesAsync();
+            }
+
+            return ApiResult<string>.Ok($"{newFees.Count} fees generated successfully.");
         }
 
 
