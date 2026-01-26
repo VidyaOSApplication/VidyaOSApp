@@ -562,37 +562,27 @@ namespace VidyaOSServices.Services
         }
 
 
-        public async Task<ApiResult<FeeStructureResponse>> SaveFeeStructureAsync(
-     FeeStructureRequest req)
+        public async Task<ApiResult<FeeStructureResponse>> SaveFeeStructureAsync(FeeStructureRequest req)
         {
-            // 🔴 BASIC VALIDATIONS
-            if (req == null)
-                return ApiResult<FeeStructureResponse>.Fail("Request is required.");
+            // 1. BASIC VALIDATIONS
+            if (req == null) return ApiResult<FeeStructureResponse>.Fail("Request is required.");
+            if (req.SchoolId <= 0) return ApiResult<FeeStructureResponse>.Fail("Invalid school.");
+            if (req.ClassId <= 0) return ApiResult<FeeStructureResponse>.Fail("Invalid class.");
+            if (string.IsNullOrWhiteSpace(req.FeeName)) return ApiResult<FeeStructureResponse>.Fail("Fee name is required.");
+            if (req.MonthlyAmount <= 0) return ApiResult<FeeStructureResponse>.Fail("Monthly amount must be greater than zero.");
 
-            if (req.SchoolId <= 0)
-                return ApiResult<FeeStructureResponse>.Fail("Invalid school.");
+            // 2. UPDATED STREAM RULE 
+            // Only 11 and 12 require a stream. All others (1-10, 13, 14, 15) must be null.
+            bool isSeniorClass = (req.ClassId == 11 || req.ClassId == 12);
 
-            if (req.ClassId <= 0)
-                return ApiResult<FeeStructureResponse>.Fail("Invalid class.");
+            if (isSeniorClass && req.StreamId == null)
+                return ApiResult<FeeStructureResponse>.Fail("Stream is required for class 11 and 12.");
 
-            if (string.IsNullOrWhiteSpace(req.FeeName))
-                return ApiResult<FeeStructureResponse>.Fail("Fee name is required.");
+            if (!isSeniorClass)
+                req.StreamId = null; // Forces Nursery, LKG, UKG, and 1-10 to have no stream
 
-            if (req.MonthlyAmount <= 0)
-                return ApiResult<FeeStructureResponse>.Fail("Monthly amount must be greater than zero.");
-
-            // 🔴 STREAM RULE
-            // Class 11 & 12 → stream REQUIRED
-            if ((req.ClassId == 11 || req.ClassId == 12) && req.StreamId == null)
-                return ApiResult<FeeStructureResponse>.Fail(
-                    "Stream is required for class 11 and 12."
-                );
-
-            // Class 1–10 → stream MUST be null
-            if (req.ClassId < 11)
-                req.StreamId = null;
-
-            // 🔍 CHECK EXISTING FEE (School + Class + Stream)
+            // 3. CHECK EXISTING FEE
+            // We use a specific check for null to ensure EF generates the correct 'IS NULL' SQL
             var existingFee = await _context.FeeStructures
                 .FirstOrDefaultAsync(f =>
                     f.SchoolId == req.SchoolId &&
@@ -601,34 +591,24 @@ namespace VidyaOSServices.Services
                     f.IsActive == true
                 );
 
-            // 🔁 UPDATE
+            // 4. UPDATE
             if (existingFee != null)
             {
                 existingFee.FeeName = req.FeeName;
                 existingFee.MonthlyAmount = req.MonthlyAmount;
+                // Optionally update UpdatedAt if you have that column
 
                 await _context.SaveChangesAsync();
 
-                return ApiResult<FeeStructureResponse>.Ok(
-                    new FeeStructureResponse
-                    {
-                        FeeStructureId = existingFee.FeeStructureId,
-                        ClassId = existingFee.ClassId!.Value,
-                        StreamId = existingFee.StreamId,
-                        FeeName = existingFee.FeeName!,
-                        MonthlyAmount = existingFee.MonthlyAmount!.Value,
-                        IsActive = true
-                    },
-                    "Fee structure updated successfully."
-                );
+                return ApiResult<FeeStructureResponse>.Ok(MapToResponse(existingFee), "Fee structure updated successfully.");
             }
 
-            // ➕ CREATE NEW
+            // 5. CREATE NEW
             var fee = new FeeStructure
             {
                 SchoolId = req.SchoolId,
                 ClassId = req.ClassId,
-                StreamId = req.StreamId, // null for 1–10, value for 11–12
+                StreamId = req.StreamId,
                 FeeName = req.FeeName,
                 MonthlyAmount = req.MonthlyAmount,
                 IsActive = true,
@@ -638,18 +618,21 @@ namespace VidyaOSServices.Services
             _context.FeeStructures.Add(fee);
             await _context.SaveChangesAsync();
 
-            return ApiResult<FeeStructureResponse>.Ok(
-                new FeeStructureResponse
-                {
-                    FeeStructureId = fee.FeeStructureId,
-                    ClassId = fee.ClassId!.Value,
-                    StreamId = fee.StreamId,
-                    FeeName = fee.FeeName!,
-                    MonthlyAmount = fee.MonthlyAmount!.Value,
-                    IsActive = true
-                },
-                "Fee structure created successfully."
-            );
+            return ApiResult<FeeStructureResponse>.Ok(MapToResponse(fee), "Fee structure created successfully.");
+        }
+
+        // Private helper to avoid repeating the mapping code
+        private FeeStructureResponse MapToResponse(FeeStructure f)
+        {
+            return new FeeStructureResponse
+            {
+                FeeStructureId = f.FeeStructureId,
+                ClassId = f.ClassId!.Value,
+                StreamId = f.StreamId,
+                FeeName = f.FeeName!,
+                MonthlyAmount = f.MonthlyAmount!.Value,
+                IsActive = f.IsActive ?? true
+            };
         }
 
 
