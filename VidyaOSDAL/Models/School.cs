@@ -36,4 +36,6 @@ public partial class School
     public bool? IsActive { get; set; }
 
     public DateTime? CreatedAt { get; set; }
+
+    public virtual ICollection<Class> Classes { get; set; } = new List<Class>();
 }

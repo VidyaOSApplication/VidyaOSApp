@@ -14,4 +14,6 @@ public partial class Stream
     public string StreamName { get; set; } = null!;
 
     public bool? IsActive { get; set; }
+
+    public virtual Class Class { get; set; } = null!;
 }
