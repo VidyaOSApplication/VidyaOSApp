@@ -1156,6 +1156,24 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<SubjectDropdownDto>>.Ok(subjects);
         }
+        // Method 1: Get the list for the Directory
+        public async Task<ApiResult<List<StudentSummaryDto>>> GetStudentsBySchoolAsync(int schoolId)
+        {
+            var data = await _context.Students
+                .Where(s => s.SchoolId == schoolId)
+                .Select(s => new StudentSummaryDto
+                {
+                    StudentId = s.StudentId,
+                    FullName = s.FirstName + " " + s.LastName,
+                    AdmissionNo = s.AdmissionNo,
+                    ClassName = _context.Classes
+                        .Where(c => c.SchoolId == s.SchoolId && c.ClassId == s.ClassId)
+                        .Select(c => c.ClassName).FirstOrDefault() ?? "N/A"
+                }).ToListAsync();
+            return ApiResult<List<StudentSummaryDto>>.Ok(data);
+        }
+
+        // Method 2: Get the full detail for the Profile
         public async Task<ApiResult<StudentDetailsDto>> GetStudentDetailsAsync(int studentId)
         {
             var student = await _context.Students
@@ -1166,29 +1184,23 @@ namespace VidyaOSServices.Services
                     FullName = s.FirstName + " " + s.LastName,
                     AdmissionNo = s.AdmissionNo,
                     RollNo = s.RollNo,
-                    // 🔑 Multi-tenant Join using Composite Keys
+                    // CRITICAL: Must use SchoolId + ClassId for Composite Key Join
                     ClassName = _context.Classes
                         .Where(c => c.SchoolId == s.SchoolId && c.ClassId == s.ClassId)
-                        .Select(c => c.ClassName)
-                        .FirstOrDefault() ?? "N/A",
+                        .Select(c => c.ClassName).FirstOrDefault() ?? "N/A",
                     SectionName = _context.Sections
                         .Where(sec => sec.SchoolId == s.SchoolId && sec.ClassId == s.ClassId && sec.SectionId == s.SectionId)
-                        .Select(sec => sec.SectionName)
-                        .FirstOrDefault() ?? "N/A",
-                    AcademicYear = s.AcademicYear,
+                        .Select(sec => sec.SectionName).FirstOrDefault() ?? "N/A",
                     ParentPhone = s.ParentPhone,
                     FatherName = s.FatherName,
                     MotherName = s.MotherName,
                     AddressLine1 = s.AddressLine1,
                     City = s.City,
-                    State = s.State
-                })
-                .FirstOrDefaultAsync();
+                    State = s.State,
+                    AcademicYear = s.AcademicYear
+                }).FirstOrDefaultAsync();
 
-            if (student == null)
-                return ApiResult<StudentDetailsDto>.Fail("Student profile not found.");
-
-            return ApiResult<StudentDetailsDto>.Ok(student);
+            return student != null ? ApiResult<StudentDetailsDto>.Ok(student) : ApiResult<StudentDetailsDto>.Fail("Not found");
         }
 
     }

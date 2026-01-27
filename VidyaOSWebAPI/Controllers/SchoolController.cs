@@ -273,14 +273,19 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        // API 1: Called by StudentDirectory.tsx
+        [HttpGet]
+        public async Task<IActionResult> GetStudentsBySchool(int schoolId)
+        {
+            var result = await _schoolService.GetStudentsBySchoolAsync(schoolId);
+            return Ok(result);
+        }
+
+        // API 2: Called by StudentProfile.tsx
         [HttpGet]
         public async Task<IActionResult> GetStudentDetails(int id)
         {
             var result = await _schoolService.GetStudentDetailsAsync(id);
-
-            if (!result.Success)
-                return NotFound(result);
-
             return Ok(result);
         }
     }
