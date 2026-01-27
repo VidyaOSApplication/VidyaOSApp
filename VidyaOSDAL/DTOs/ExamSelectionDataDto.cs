@@ -21,18 +21,6 @@ namespace VidyaOSDAL.DTOs
         public List<LookUpDto> Streams { get; set; } = new();  // New
     }
 
-    public class BulkSaveRequest
-    {
-        public int SchoolId { get; set; }
-        public int ExamId { get; set; }
-        public int ClassId { get; set; }
-        public int SubjectId { get; set; }
-        public int SectionId { get; set; } // New
-        public int? StreamId { get; set; } // Optional (11th/12th only)
-        public List<BulkMarksEntryDto> Marks { get; set; } = new();
-    }
-
-    // For the Student List & Saving
     public class BulkMarksEntryDto
     {
         public int StudentId { get; set; }
@@ -43,5 +31,16 @@ namespace VidyaOSDAL.DTOs
         public int MaxMarks { get; set; }
     }
 
-   
+    public class BulkSaveRequest
+    {
+        public int SchoolId { get; set; }
+        public int ExamId { get; set; }
+        public int ClassId { get; set; }
+        public int SubjectId { get; set; }
+        public int SectionId { get; set; }
+        public int? StreamId { get; set; }
+        public List<BulkMarksEntryDto> Marks { get; set; } = new();
+    }
+
+
 }

@@ -289,24 +289,14 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
         [HttpGet]
-        public async Task<IActionResult> GetExamSelectionData(int schoolId)
-        {
-            var result = await _schoolService.GetExamSelectionDataAsync(schoolId);
-            return Ok(result);
-        }
+        public async Task<IActionResult> GetExams(int schoolId) => Ok(await _schoolService.GetExamsOnlyAsync(schoolId));
 
         [HttpGet]
-        public async Task<IActionResult> GetMarksEntryList(int examId, int classId, int subjectId, int sectionId, int? streamId)
-        {
-            var result = await _schoolService.GetMarksEntryListAsync(examId, classId, subjectId, sectionId, streamId);
-            return Ok(result);
-        }
+        public async Task<IActionResult> GetMarksEntryList(int examId, int classId, int sectionId, int subjectId, int? streamId) =>
+            Ok(await _schoolService.GetMarksEntryListAsync(examId, classId, sectionId, subjectId, streamId));
 
         [HttpPost]
-        public async Task<IActionResult> SaveBulkMarks([FromBody] BulkSaveRequest request)
-        {
-            var result = await _schoolService.SaveBulkMarksAsync(request);
-            return Ok(result);
-        }
+        public async Task<IActionResult> SaveBulkMarks([FromBody] BulkSaveRequest request) =>
+            Ok(await _schoolService.SaveBulkMarksAsync(request));
     }
 }

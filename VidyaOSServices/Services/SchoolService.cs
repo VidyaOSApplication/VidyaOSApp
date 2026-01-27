@@ -1214,39 +1214,22 @@ namespace VidyaOSServices.Services
 
             return ApiResult<StudentDetailsDto>.Ok(student);
         }
-        public async Task<ApiResult<ExamSelectionDataDto>> GetExamSelectionDataAsync(int schoolId)
+        public async Task<ApiResult<List<LookUpDto>>> GetExamsOnlyAsync(int schoolId)
         {
-            var data = new ExamSelectionDataDto
-            {
-                Exams = await _context.Exams.AsNoTracking()
-                    .Where(e => e.SchoolId == schoolId && e.IsActive==true)
-                    .Select(e => new LookUpDto { Id = e.ExamId, Name = e.ExamName }).ToListAsync(),
-
-                Classes = await _context.Classes.AsNoTracking()
-                    .Where(c => c.SchoolId == schoolId && c.IsActive == true)
-                    .Select(c => new LookUpDto { Id = c.ClassId, Name = c.ClassName }).ToListAsync(),
-
-                Subjects = await _context.Subjects.AsNoTracking()
-                    .Where(s => s.SchoolId == schoolId && s.IsActive == true)
-                    .Select(s => new LookUpDto { Id = s.SubjectId, Name = s.SubjectName }).ToListAsync(),
-
-                Sections = await _context.Sections.AsNoTracking()
-                    .Where(sec => sec.SchoolId == schoolId)
-                    .Select(sec => new LookUpDto { Id = sec.SectionId, Name = sec.SectionName }).ToListAsync(),
-
-                Streams = await _context.Streams.AsNoTracking()
-                    .Where(st => st.SchoolId == schoolId)
-                    .Select(st => new LookUpDto { Id = st.StreamId, Name = st.StreamName }).ToListAsync()
-            };
-            return ApiResult<ExamSelectionDataDto>.Ok(data);
+            var exams = await _context.Exams
+                .AsNoTracking()
+                .Where(e => e.SchoolId == schoolId && e.IsActive==true)
+                .OrderByDescending(e => e.CreatedAt)
+                .Select(e => new LookUpDto { Id = e.ExamId, Name = e.ExamName })
+                .ToListAsync();
+            return ApiResult<List<LookUpDto>>.Ok(exams);
         }
 
-        public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int examId, int classId, int subjectId, int sectionId, int? streamId)
+        public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int examId, int classId, int sectionId, int subjectId, int? streamId)
         {
             var query = _context.Students.AsNoTracking()
                 .Where(s => s.ClassId == classId && s.SectionId == sectionId);
 
-            // Apply Stream filter only if provided (for 11th/12th)
             if (streamId.HasValue && streamId > 0)
             {
                 query = query.Where(s => s.StreamId == streamId);
@@ -1285,11 +1268,10 @@ namespace VidyaOSServices.Services
                     if (existing != null)
                     {
                         existing.MarksObtained = item.MarksObtained ?? 0;
-                        existing.MaxMarks = item.MaxMarks;
                     }
                     else
                     {
-                        await _context.StudentMarks.AddAsync(new StudentMark
+                        _context.StudentMarks.Add(new StudentMark
                         {
                             SchoolId = request.SchoolId,
                             ExamId = request.ExamId,
@@ -1298,7 +1280,7 @@ namespace VidyaOSServices.Services
                             StudentId = item.StudentId,
                             MarksObtained = item.MarksObtained ?? 0,
                             MaxMarks = item.MaxMarks,
-                           
+                            
                         });
                     }
                 }
@@ -1309,7 +1291,7 @@ namespace VidyaOSServices.Services
             catch
             {
                 await transaction.RollbackAsync();
-                return ApiResult<bool>.Fail("Database error.");
+                return ApiResult<bool>.Fail("Database error while saving.");
             }
         }
 
