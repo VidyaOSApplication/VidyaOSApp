@@ -1214,6 +1214,119 @@ namespace VidyaOSServices.Services
 
             return ApiResult<StudentDetailsDto>.Ok(student);
         }
+        public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int examId, int classId, int subjectId, int? sectionId)
+        {
+            var students = await _context.Students
+                .Where(s => s.ClassId == classId && (!sectionId.HasValue || s.SectionId == sectionId))
+                .OrderBy(s => s.RollNo)
+                .Select(s => new BulkMarksEntryDto
+                {
+                    StudentId = s.StudentId,
+                    RollNo = s.RollNo,
+                    FullName = s.FirstName + " " + s.LastName,
+                    AdmissionNo = s.AdmissionNo,
+                    // Fetch existing marks if any
+                    MarksObtained = _context.StudentMarks
+                        .Where(m => m.ExamId == examId && m.SubjectId == subjectId && m.StudentId == s.StudentId)
+                        .Select(m => (int?)m.MarksObtained).FirstOrDefault(),
+                    // Fetch MaxMarks from ExamSubjects config or default to 100
+                    MaxMarks = _context.ExamSubjects
+                        .Where(es => es.ExamId == examId && es.SubjectId == subjectId)
+                        .Select(es => es.MaxMarks).FirstOrDefault()
+                }).ToListAsync();
+
+            // Set a default MaxMarks if not configured in ExamSubjects
+            students.ForEach(s => { if (s.MaxMarks == 0) s.MaxMarks = 100; });
+
+            return ApiResult<List<BulkMarksEntryDto>>.Ok(students);
+        }
+
+        public async Task<ApiResult<ExamSelectionDataDto>> GetExamSelectionDataAsync(int schoolId)
+        {
+            var data = new ExamSelectionDataDto
+            {
+                Exams = await _context.Exams.AsNoTracking()
+                    .Where(e => e.SchoolId == schoolId && e.IsActive==true)
+                    .Select(e => new LookUpDto { Id = e.ExamId, Name = e.ExamName }).ToListAsync(),
+
+                Classes = await _context.Classes.AsNoTracking()
+                    .Where(c => c.SchoolId == schoolId && c.IsActive==true)
+                    .Select(c => new LookUpDto { Id = c.ClassId, Name = c.ClassName }).ToListAsync(),
+
+                Subjects = await _context.Subjects.AsNoTracking()
+                    .Where(s => s.SchoolId == schoolId && s.IsActive == true)
+                    .Select(s => new LookUpDto { Id = s.SubjectId, Name = s.SubjectName }).ToListAsync()
+            };
+            return ApiResult<ExamSelectionDataDto>.Ok(data);
+        }
+
+        public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int examId, int classId, int subjectId)
+        {
+            // Fetch all students in the class
+            var students = await _context.Students
+                .AsNoTracking()
+                .Where(s => s.ClassId == classId)
+                .OrderBy(s => s.RollNo)
+                .Select(s => new BulkMarksEntryDto
+                {
+                    StudentId = s.StudentId,
+                    RollNo = s.RollNo,
+                    FullName = s.FirstName + " " + s.LastName,
+                    AdmissionNo = s.AdmissionNo,
+                    // Subquery to find marks if already entered
+                    MarksObtained = _context.StudentMarks
+                        .Where(m => m.ExamId == examId && m.SubjectId == subjectId && m.StudentId == s.StudentId)
+                        .Select(m => (int?)m.MarksObtained).FirstOrDefault(),
+                    MaxMarks = _context.ExamSubjects
+                        .Where(es => es.ExamId == examId && es.SubjectId == subjectId)
+                        .Select(es => es.MaxMarks).FirstOrDefault()
+                }).ToListAsync();
+
+            // Default MaxMarks if not configured
+            students.ForEach(s => { if (s.MaxMarks == 0) s.MaxMarks = 100; });
+
+            return ApiResult<List<BulkMarksEntryDto>>.Ok(students);
+        }
+
+        public async Task<ApiResult<bool>> SaveBulkMarksAsync(BulkSaveRequest request)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                foreach (var item in request.Marks)
+                {
+                    var existingMark = await _context.StudentMarks
+                        .FirstOrDefaultAsync(m => m.ExamId == request.ExamId && m.SubjectId == request.SubjectId && m.StudentId == item.StudentId);
+
+                    if (existingMark != null)
+                    {
+                        existingMark.MarksObtained = item.MarksObtained ?? 0;
+                        existingMark.MaxMarks = item.MaxMarks;
+                    }
+                    else
+                    {
+                        await _context.StudentMarks.AddAsync(new StudentMark
+                        {
+                            SchoolId = request.SchoolId,
+                            ExamId = request.ExamId,
+                            ClassId = request.ClassId,
+                            SubjectId = request.SubjectId,
+                            StudentId = item.StudentId,
+                            MarksObtained = item.MarksObtained ?? 0,
+                            MaxMarks = item.MaxMarks
+                        });
+                    }
+                }
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return ApiResult<bool>.Ok(true);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                return ApiResult<bool>.Fail("Database error while saving marks.");
+            }
+        }
 
     }
 }

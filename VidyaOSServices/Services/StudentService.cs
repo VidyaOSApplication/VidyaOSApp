@@ -200,7 +200,51 @@ namespace VidyaOSServices.Services
                 await tx.RollbackAsync();
                 throw;
             }
+
         }
-        
+        public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int examId, int classId, int subjectId, int? sectionId)
+        {
+            var students = await _context.Students
+                .Where(s => s.ClassId == classId && (!sectionId.HasValue || s.SectionId == sectionId))
+                .OrderBy(s => s.RollNo) // Important: Sort by Roll No
+                .Select(s => new BulkMarksEntryDto
+                {
+                    StudentId = s.StudentId,
+                    RollNo = s.RollNo,
+                    FullName = s.FirstName + " " + s.LastName,
+                    AdmissionNo = s.AdmissionNo,
+                    MarksObtained = _context.StudentMarks
+                        .Where(m => m.ExamId == examId && m.SubjectId == subjectId && m.StudentId == s.StudentId)
+                        .Select(m => m.MarksObtained).FirstOrDefault(),
+                    MaxMarks = _context.StudentMarks
+                        .Where(m => m.ExamId == examId && m.SubjectId == subjectId && m.StudentId == s.StudentId)
+                        .Select(m => m.MaxMarks).FirstOrDefault() == 0 ? 100 : _context.StudentMarks
+                        .Where(m => m.ExamId == examId && m.SubjectId == subjectId && m.StudentId == s.StudentId)
+                        .Select(m => m.MaxMarks).FirstOrDefault()
+                }).ToListAsync();
+
+            return ApiResult<List<BulkMarksEntryDto>>.Ok(students);
+        }
+
+        public async Task<ApiResult<ExamSelectionDataDto>> GetExamSelectionDataAsync(int schoolId)
+        {
+            var data = new ExamSelectionDataDto
+            {
+                Exams = await _context.Exams
+                    .Where(e => e.SchoolId == schoolId && e.IsActive == true)
+                    .Select(e => new LookUpDto { Id = e.ExamId, Name = e.ExamName }).ToListAsync(),
+
+                Classes = await _context.Classes
+                    .Where(c => c.SchoolId == schoolId && c.IsActive == true)
+                    .Select(c => new LookUpDto { Id = c.ClassId, Name = c.ClassName }).ToListAsync(),
+
+                Subjects = await _context.Subjects
+                    .Where(s => s.SchoolId == schoolId && s.IsActive == true)
+                    .Select(s => new LookUpDto { Id = s.SubjectId, Name = s.SubjectName }).ToListAsync()
+            };
+
+            return ApiResult<ExamSelectionDataDto>.Ok(data);
+        }
+
     }
 }
