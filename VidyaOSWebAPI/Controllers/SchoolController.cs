@@ -292,6 +292,10 @@ namespace VidyaOSWebAPI.Controllers
         public async Task<IActionResult> GetExams(int schoolId) => Ok(await _schoolService.GetExamsOnlyAsync(schoolId));
 
         [HttpGet]
+        public async Task<IActionResult> GetSubjects(int schoolId, int classId, int? streamId) =>
+            Ok(await _schoolService.GetSubjectsByContextAsync(schoolId, classId, streamId));
+
+        [HttpGet]
         public async Task<IActionResult> GetMarksEntryList(int examId, int classId, int sectionId, int subjectId, int? streamId) =>
             Ok(await _schoolService.GetMarksEntryListAsync(examId, classId, sectionId, subjectId, streamId));
 

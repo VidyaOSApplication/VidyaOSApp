@@ -11,7 +11,11 @@ namespace VidyaOSDAL.DTOs
         public int Id { get; set; }
         public string Name { get; set; } = null!;
     }
-
+    public class AcademicLookupDto
+    {
+        public List<LookUpDto> Exams { get; set; } = new();
+        public List<LookUpDto> Subjects { get; set; } = new();
+    }
     public class ExamSelectionDataDto
     {
         public List<LookUpDto> Exams { get; set; } = new();

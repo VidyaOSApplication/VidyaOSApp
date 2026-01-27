@@ -1216,13 +1216,24 @@ namespace VidyaOSServices.Services
         }
         public async Task<ApiResult<List<LookUpDto>>> GetExamsOnlyAsync(int schoolId)
         {
-            var exams = await _context.Exams
-                .AsNoTracking()
+            var exams = await _context.Exams.AsNoTracking()
                 .Where(e => e.SchoolId == schoolId && e.IsActive==true)
-                .OrderByDescending(e => e.CreatedAt)
-                .Select(e => new LookUpDto { Id = e.ExamId, Name = e.ExamName })
-                .ToListAsync();
+                .Select(e => new LookUpDto { Id = e.ExamId, Name = e.ExamName }).ToListAsync();
             return ApiResult<List<LookUpDto>>.Ok(exams);
+        }
+
+        public async Task<ApiResult<List<LookUpDto>>> GetSubjectsByContextAsync(int schoolId, int classId, int? streamId)
+        {
+            var query = _context.Subjects.AsNoTracking()
+                .Where(s => s.SchoolId == schoolId && s.ClassId == classId);
+
+            if (streamId.HasValue && streamId > 0)
+                query = query.Where(s => s.StreamId == streamId);
+
+            var subjects = await query
+                .Select(s => new LookUpDto { Id = s.SubjectId, Name = s.SubjectName }).ToListAsync();
+
+            return ApiResult<List<LookUpDto>>.Ok(subjects);
         }
 
         public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int examId, int classId, int sectionId, int subjectId, int? streamId)
