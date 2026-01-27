@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.IO;
 using VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
@@ -272,5 +273,15 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GetStudentDetails(int id)
+        {
+            var result = await _schoolService.GetStudentDetailsAsync(id);
+
+            if (!result.Success)
+                return NotFound(result);
+
+            return Ok(result);
+        }
     }
 }

@@ -768,10 +768,10 @@ namespace VidyaOSServices.Services
             );
         }
         public async Task<ApiResult<List<StudentListDto>>> GetStudentsByClassSectionAsync(
-    int schoolId,
-    int classId,
-    int sectionId,
-    int? streamId = null)
+            int schoolId,
+            int classId,
+            int sectionId,
+            int? streamId = null)
         {
             var students = await (
                 from s in _context.Students
@@ -1156,7 +1156,40 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<SubjectDropdownDto>>.Ok(subjects);
         }
+        public async Task<ApiResult<StudentDetailsDto>> GetStudentDetailsAsync(int studentId)
+        {
+            var student = await _context.Students
+                .Where(s => s.StudentId == studentId)
+                .Select(s => new StudentDetailsDto
+                {
+                    StudentId = s.StudentId,
+                    FullName = s.FirstName + " " + s.LastName,
+                    AdmissionNo = s.AdmissionNo,
+                    RollNo = s.RollNo,
+                    // 🔑 Multi-tenant Join using Composite Keys
+                    ClassName = _context.Classes
+                        .Where(c => c.SchoolId == s.SchoolId && c.ClassId == s.ClassId)
+                        .Select(c => c.ClassName)
+                        .FirstOrDefault() ?? "N/A",
+                    SectionName = _context.Sections
+                        .Where(sec => sec.SchoolId == s.SchoolId && sec.ClassId == s.ClassId && sec.SectionId == s.SectionId)
+                        .Select(sec => sec.SectionName)
+                        .FirstOrDefault() ?? "N/A",
+                    AcademicYear = s.AcademicYear,
+                    ParentPhone = s.ParentPhone,
+                    FatherName = s.FatherName,
+                    MotherName = s.MotherName,
+                    AddressLine1 = s.AddressLine1,
+                    City = s.City,
+                    State = s.State
+                })
+                .FirstOrDefaultAsync();
 
+            if (student == null)
+                return ApiResult<StudentDetailsDto>.Fail("Student profile not found.");
+
+            return ApiResult<StudentDetailsDto>.Ok(student);
+        }
 
     }
 }
