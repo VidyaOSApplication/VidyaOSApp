@@ -21,5 +21,6 @@ namespace VidyaOSDAL.DTOs
         public string AddressLine1 { get; set; } = null!;
         public string City { get; set; } = null!;
         public string State { get; set; } = null!;
+        public string SchoolName { get; set; } = null!;
     }
 }

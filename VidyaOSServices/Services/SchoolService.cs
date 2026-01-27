@@ -1177,6 +1177,7 @@ namespace VidyaOSServices.Services
         public async Task<ApiResult<StudentDetailsDto>> GetStudentDetailsAsync(int studentId)
         {
             var student = await _context.Students
+                .AsNoTracking() // 🚀 Optimization: Faster read-only query
                 .Where(s => s.StudentId == studentId)
                 .Select(s => new StudentDetailsDto
                 {
@@ -1184,23 +1185,34 @@ namespace VidyaOSServices.Services
                     FullName = s.FirstName + " " + s.LastName,
                     AdmissionNo = s.AdmissionNo,
                     RollNo = s.RollNo,
-                    // CRITICAL: Must use SchoolId + ClassId for Composite Key Join
+                    AcademicYear = s.AcademicYear,
+
+                    // 🏢 Dynamic School Name Mapping
+                    SchoolName = _context.Schools
+                        .Where(sch => sch.SchoolId == s.SchoolId)
+                        .Select(sch => sch.SchoolName)
+                        .FirstOrDefault() ?? "School",
+
+                    // 🔑 Composite Key Joins
                     ClassName = _context.Classes
                         .Where(c => c.SchoolId == s.SchoolId && c.ClassId == s.ClassId)
                         .Select(c => c.ClassName).FirstOrDefault() ?? "N/A",
+
                     SectionName = _context.Sections
                         .Where(sec => sec.SchoolId == s.SchoolId && sec.ClassId == s.ClassId && sec.SectionId == s.SectionId)
                         .Select(sec => sec.SectionName).FirstOrDefault() ?? "N/A",
+
                     ParentPhone = s.ParentPhone,
                     FatherName = s.FatherName,
                     MotherName = s.MotherName,
                     AddressLine1 = s.AddressLine1,
                     City = s.City,
-                    State = s.State,
-                    AcademicYear = s.AcademicYear
+                    State = s.State
                 }).FirstOrDefaultAsync();
 
-            return student != null ? ApiResult<StudentDetailsDto>.Ok(student) : ApiResult<StudentDetailsDto>.Fail("Not found");
+            if (student == null) return ApiResult<StudentDetailsDto>.Fail("Student not found.");
+
+            return ApiResult<StudentDetailsDto>.Ok(student);
         }
 
     }
