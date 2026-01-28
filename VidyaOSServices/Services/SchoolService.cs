@@ -510,15 +510,28 @@ namespace VidyaOSServices.Services
         }
 
 
-        public async Task<ApiResult<List<PendingFeeResponse>>> GetPendingFeesAsync(
-    int schoolId)
+        public async Task<ApiResult<List<PendingFeeResponse>>> GetPendingFeesAsync(int schoolId)
         {
+            // 1. Get all valid Student IDs for this school first
+            var schoolStudentIds = await _context.Students
+                .Where(s => s.SchoolId == schoolId)
+                .Select(s => s.StudentId)
+                .ToListAsync();
+
+            if (!schoolStudentIds.Any())
+            {
+                return ApiResult<List<PendingFeeResponse>>.Ok(new List<PendingFeeResponse>());
+            }
+
+            // 2. Fetch fees only for these specific students
+            // This prevents the 180-record duplication by isolating the student pool
             var data = await (
                 from sf in _context.StudentFees
                 join s in _context.Students on sf.StudentId equals s.StudentId
                 join c in _context.Classes on s.ClassId equals c.ClassId
                 join sec in _context.Sections on s.SectionId equals sec.SectionId
-                where s.SchoolId == schoolId && sf.Status == "Pending"
+                where schoolStudentIds.Contains((int)sf.StudentId) // 🚀 The key filter
+                   && sf.Status == "Pending"
                 select new PendingFeeResponse
                 {
                     StudentFeeId = sf.StudentFeeId,
@@ -530,7 +543,9 @@ namespace VidyaOSServices.Services
                     FeeMonth = sf.FeeMonth!,
                     Amount = sf.Amount ?? 0
                 }
-            ).ToListAsync();
+            )
+            .Distinct() // 🛡️ Safety net for any remaining configuration duplicates
+            .ToListAsync();
 
             return ApiResult<List<PendingFeeResponse>>.Ok(data);
         }
