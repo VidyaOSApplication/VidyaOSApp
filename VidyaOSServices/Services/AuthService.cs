@@ -49,5 +49,41 @@ namespace VidyaOSServices.Services
                 "Logged in successfully."
             );
         }
+
+        public async Task<ApiResult<UserSessionDto>> GetUserSessionAsync(int userId)
+        {
+            var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user == null) return ApiResult<UserSessionDto>.Fail("User not found.");
+
+            var school = await _context.Schools.AsNoTracking().FirstOrDefaultAsync(s => s.SchoolId == user.SchoolId);
+
+            var session = new UserSessionDto
+            {
+                UserId = user.UserId,
+                Role = user.Role,
+                SchoolId = user.SchoolId ?? 0,
+                SchoolName = school?.SchoolName ?? "",
+                SchoolCode = school?.SchoolCode ?? "",
+                RegistrationNo = school?.RegistrationNumber ?? "",
+                AffiliationNo = school?.AffiliationNumber ?? ""
+            };
+
+            if (user.Role == "Teacher")
+            {
+                var teacher = await _context.Teachers.AsNoTracking().FirstOrDefaultAsync(t => t.UserId == userId);
+                session.FullName = teacher?.FullName ?? "";
+                session.ProfileId = teacher?.TeacherId;
+            }
+            else if (user.Role == "Student")
+            {
+                var student = await _context.Students.AsNoTracking().FirstOrDefaultAsync(s => s.UserId == userId);
+                session.FullName = $"{student?.FirstName} {student?.LastName}";
+                session.ProfileId = student?.StudentId;
+                session.AdmissionNo = student?.AdmissionNo;
+                session.RollNo = student?.RollNo;
+            }
+
+            return ApiResult<UserSessionDto>.Ok(session);
+        }
     }
 }
