@@ -50,4 +50,8 @@ public partial class Student
     public DateTime? CreatedAt { get; set; }
 
     public int? StreamId { get; set; }
+
+    public virtual Class Class { get; set; } = null!;
+
+    public virtual Section Section { get; set; } = null!;
 }

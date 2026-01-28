@@ -302,5 +302,18 @@ namespace VidyaOSWebAPI.Controllers
         [HttpPost]
         public async Task<IActionResult> SaveBulkMarks([FromBody] BulkSaveRequest request) =>
             Ok(await _schoolService.SaveBulkMarksAsync(request));
+
+        [HttpGet]
+        public async Task<IActionResult> GetStudentResultSummary(int studentId, int examId)
+        {
+            var result = await _schoolService.GetStudentResultSummaryAsync(studentId, examId);
+
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
     }
 }

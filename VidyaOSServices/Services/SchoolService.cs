@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using VidyaOSDAL.DTOs;
+using VidyaOSDAL.DTOs.VidyaOS.Models.DTOs;
 using VidyaOSDAL.Models;
 using VidyaOSHelper.SchoolHelper;
 using static VidyaOSHelper.SchoolHelper.SchoolHelper;
@@ -1303,6 +1304,69 @@ namespace VidyaOSServices.Services
             {
                 await transaction.RollbackAsync();
                 return ApiResult<bool>.Fail("Database error while saving.");
+            }
+        }
+
+        public async Task<ApiResult<StudentResultSummaryDto>> GetStudentResultSummaryAsync(int studentId, int examId)
+        {
+            try
+            {
+                // 1. Get Student and Class details using a Manual Join
+                var studentData = await (from s in _context.Students
+                                         join c in _context.Classes on s.ClassId equals c.ClassId
+                                         where s.StudentId == studentId
+                                         select new
+                                         {
+                                             s.FirstName,
+                                             s.LastName,
+                                             s.RollNo,
+                                             s.AdmissionNo,
+                                             c.ClassName
+                                         }).FirstOrDefaultAsync();
+
+                if (studentData == null) return ApiResult<StudentResultSummaryDto>.Fail("Student not found.");
+
+                // 2. Get Exam Name
+                var examName = await _context.Exams
+                    .Where(e => e.ExamId == examId)
+                    .Select(e => e.ExamName)
+                    .FirstOrDefaultAsync() ?? "Examination";
+
+                // 3. Get Marks and Subject Names using a Manual Join
+                var marksList = await (from m in _context.StudentMarks
+                                       join sub in _context.Subjects on m.SubjectId equals sub.SubjectId
+                                       where m.StudentId == studentId && m.ExamId == examId
+                                       select new SubjectMarkDto
+                                       {
+                                           SubjectName = sub.SubjectName,
+                                           Obtained = m.MarksObtained,
+                                           Max = m.MaxMarks
+                                       }).ToListAsync();
+
+                if (!marksList.Any()) return ApiResult<StudentResultSummaryDto>.Fail("No marks found for this exam.");
+
+                // 4. Calculations
+                int totalObtained = marksList.Sum(x => x.Obtained);
+                int totalMax = marksList.Sum(x => x.Max);
+
+                var summary = new StudentResultSummaryDto
+                {
+                    FullName = $"{studentData.FirstName} {studentData.LastName}",
+                    RollNo = studentData.RollNo?.ToString() ?? "N/A",
+                    AdmissionNo = studentData.AdmissionNo,
+                    ExamName = examName,
+                    ClassName = studentData.ClassName,
+                    Marks = marksList,
+                    TotalObtained = totalObtained,
+                    TotalMax = totalMax,
+                    Percentage = totalMax > 0 ? Math.Round((double)totalObtained / totalMax * 100, 2) : 0
+                };
+
+                return ApiResult<StudentResultSummaryDto>.Ok(summary);
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<StudentResultSummaryDto>.Fail("Error: " + ex.Message);
             }
         }
 
