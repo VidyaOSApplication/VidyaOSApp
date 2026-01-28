@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace VidyaOSDAL.Models;
 
@@ -51,7 +52,5 @@ public partial class Student
 
     public int? StreamId { get; set; }
 
-    public virtual Class Class { get; set; } = null!;
 
-    public virtual Section Section { get; set; } = null!;
 }

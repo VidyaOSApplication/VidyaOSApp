@@ -25,5 +25,4 @@ public partial class StudentMark
 
     public DateTime? CreatedAt { get; set; }
 
-    public virtual Subject Subject { get; set; } = null!;
 }
