@@ -663,33 +663,30 @@ namespace VidyaOSServices.Services
 
         public async Task<ApiResult<List<FeeStructureListResponse>>> GetFeeStructuresAsync(int schoolId)
         {
-            var data = await (
-                from fs in _context.FeeStructures
-                    // Join Classes (Left Join)
-                join c in _context.Classes on fs.ClassId equals c.ClassId into classJoin
-                from c in classJoin.DefaultIfEmpty()
-
-                    // Join Streams (Left Join - very important)
-                join s in _context.Streams on fs.StreamId equals s.StreamId into streamJoin
-                from s in streamJoin.DefaultIfEmpty()
-
-                where fs.SchoolId == schoolId && fs.IsActive == true
-                orderby fs.ClassId
-
-                select new FeeStructureListResponse
+            var query = await _context.FeeStructures
+                .Where(fs => fs.SchoolId == schoolId && fs.IsActive == true)
+                .Select(fs => new FeeStructureListResponse
                 {
                     FeeStructureId = fs.FeeStructureId,
-                    ClassId = (int)fs.ClassId,
-                    StreamId = fs.StreamId, // Mapping the ID to the response
-                    ClassName = c != null ? c.ClassName : "Class " + fs.ClassId,
-                    StreamName = s != null ? s.StreamName : "", // Mapping the Name
+                    ClassId = (int)fs.ClassId!,
+                    StreamId = fs.StreamId,
                     FeeName = fs.FeeName!,
-                    MonthlyAmount = (decimal)fs.MonthlyAmount,
-                    IsActive = fs.IsActive ?? false
-                }
-            ).ToListAsync();
+                    MonthlyAmount = (decimal)fs.MonthlyAmount!,
+                    IsActive = fs.IsActive ?? false,
+                    // 🚀 Sub-queries instead of flat joins prevent row multiplication
+                    ClassName = _context.Classes
+                        .Where(c => c.ClassId == fs.ClassId)
+                        .Select(c => c.ClassName)
+                        .FirstOrDefault() ?? "Class " + fs.ClassId,
+                    StreamName = _context.Streams
+                        .Where(s => s.StreamId == fs.StreamId)
+                        .Select(s => s.StreamName)
+                        .FirstOrDefault() ?? ""
+                })
+                .OrderBy(x => x.ClassId)
+                .ToListAsync();
 
-            return ApiResult<List<FeeStructureListResponse>>.Ok(data);
+            return ApiResult<List<FeeStructureListResponse>>.Ok(query);
         }
         public async Task<ApiResult<List<StudentFeeHistoryResponse>>>
     GetStudentFeeHistoryAsync(int studentId)
