@@ -549,56 +549,70 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<PendingFeeResponse>>.Ok(data);
         }
-        public async Task<ApiResult<CollectFeesResponse>> CollectFeesAsync(
-    CollectFeesRequest req)
+        public async Task<ApiResult<CollectFeesResponse>> CollectFeesAsync(CollectFeesRequest req)
         {
+            // 1. Validations
             if (req.StudentId <= 0 || req.SchoolId <= 0)
-                return ApiResult<CollectFeesResponse>
-                    .Fail("Invalid student or school.");
+                return ApiResult<CollectFeesResponse>.Fail("Invalid student or school.");
 
             if (req.FeeMonths == null || !req.FeeMonths.Any())
-                return ApiResult<CollectFeesResponse>
-                    .Fail("Select at least one fee month.");
+                return ApiResult<CollectFeesResponse>.Fail("Select at least one fee month.");
 
-            var fees = await _context.StudentFees
-                .Where(f =>
-                    f.StudentId == req.StudentId &&
-                    req.FeeMonths.Contains(f.FeeMonth!) &&
-                    f.Status == "Pending")
-                .ToListAsync();
+            // 2. Start Transaction
+            using var transaction = await _context.Database.BeginTransactionAsync();
 
-            if (!fees.Any())
-                return ApiResult<CollectFeesResponse>
-                    .Fail("No pending fees found.");
-
-            decimal totalAmount = fees.Sum(f => f.Amount ?? 0);
-
-            foreach (var fee in fees)
+            try
             {
-                fee.Status = "Paid";
-                fee.PaymentMode = req.PaymentMode;
-                fee.PaidOn = DateOnly.FromDateTime(DateTime.UtcNow);
-            }
+                var fees = await _context.StudentFees
+                    .Where(f =>
+                        f.SchoolId == req.SchoolId &&
+                        f.StudentId == req.StudentId &&
+                        req.FeeMonths.Contains(f.FeeMonth!) &&
+                        f.Status == "Pending")
+                    .ToListAsync();
 
-            await _context.SaveChangesAsync();
+                if (!fees.Any())
+                    return ApiResult<CollectFeesResponse>.Fail("No pending fees found for the selected months.");
 
-            var school = await _context.Schools
-                .FirstAsync(s => s.SchoolId == req.SchoolId);
+                decimal totalAmount = fees.Sum(f => f.Amount ?? 0);
 
-            string receiptNo =
-                $"{school.SchoolCode}/{DateTime.UtcNow:yyyy}/{fees.First().StudentFeeId}";
-
-            return ApiResult<CollectFeesResponse>.Ok(
-                new CollectFeesResponse
+                // 3. Update records
+                foreach (var fee in fees)
                 {
-                    ReceiptNo = receiptNo,
-                    StudentId = req.StudentId,
-                    PaidMonths = fees.Select(f => f.FeeMonth!).ToList(),
-                    TotalAmount = totalAmount,
-                    PaidOn = DateTime.UtcNow
-                },
-                "Fee collected successfully."
-            );
+                    fee.Status = "Paid";
+                    fee.PaymentMode = req.PaymentMode;
+                    fee.PaidOn = DateOnly.FromDateTime(DateTime.UtcNow);
+                }
+
+                await _context.SaveChangesAsync();
+
+                // 4. Receipt Generation
+                var school = await _context.Schools
+                    .FirstAsync(s => s.SchoolId == req.SchoolId);
+
+                // Professional tip: Using the first FeeId or a dedicated Receipt table is better
+                string receiptNo = $"REC/{school.SchoolCode}/{DateTime.UtcNow:yyyyMMdd}/{fees.First().StudentFeeId}";
+
+                // 5. Commit everything
+                await transaction.CommitAsync();
+
+                return ApiResult<CollectFeesResponse>.Ok(
+                    new CollectFeesResponse
+                    {
+                        ReceiptNo = receiptNo,
+                        StudentId = req.StudentId,
+                        PaidMonths = fees.Select(f => f.FeeMonth!).ToList(),
+                        TotalAmount = totalAmount,
+                        PaidOn = DateTime.UtcNow
+                    },
+                    "Fee collected successfully."
+                );
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return ApiResult<CollectFeesResponse>.Fail("An error occurred: " + ex.Message);
+            }
         }
 
 
@@ -703,16 +717,20 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<FeeStructureListResponse>>.Ok(query);
         }
-        public async Task<ApiResult<List<StudentFeeHistoryResponse>>>
-    GetStudentFeeHistoryAsync(int studentId)
+        public async Task<ApiResult<List<StudentFeeHistoryResponse>>> GetStudentFeeHistoryAsync(int schoolId, int studentId)
         {
-            if (studentId <= 0)
-                return ApiResult<List<StudentFeeHistoryResponse>>
-                    .Fail("Invalid student id.");
+            // 1. Validation
+            if (schoolId <= 0)
+                return ApiResult<List<StudentFeeHistoryResponse>>.Fail("Invalid school id.");
 
+            if (studentId <= 0)
+                return ApiResult<List<StudentFeeHistoryResponse>>.Fail("Invalid student id.");
+
+            // 2. Fetch fees filtered by both School and Student
+            // This ensures data isolation between schools
             var fees = await _context.StudentFees
-                .Where(f => f.StudentId == studentId)
-                .OrderByDescending(f => f.FeeMonth)
+                .Where(f => f.SchoolId == schoolId && f.StudentId == studentId)
+                .OrderByDescending(f => f.FeeMonth) // Note: Consider sorting by a date if FeeMonth is just a string
                 .Select(f => new StudentFeeHistoryResponse
                 {
                     StudentFeeId = f.StudentFeeId,
@@ -723,6 +741,16 @@ namespace VidyaOSServices.Services
                     PaidOn = f.PaidOn
                 })
                 .ToListAsync();
+
+            // 3. Optional: Double check if student exists in this school if no fees are found
+            if (!fees.Any())
+            {
+                bool studentExists = await _context.Students
+                    .AnyAsync(s => s.StudentId == studentId && s.SchoolId == schoolId);
+
+                if (!studentExists)
+                    return ApiResult<List<StudentFeeHistoryResponse>>.Fail("Student not found in this school.");
+            }
 
             return ApiResult<List<StudentFeeHistoryResponse>>.Ok(fees);
         }

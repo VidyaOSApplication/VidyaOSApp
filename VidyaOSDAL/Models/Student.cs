@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace VidyaOSDAL.Models;
 
@@ -51,6 +50,4 @@ public partial class Student
     public DateTime? CreatedAt { get; set; }
 
     public int? StreamId { get; set; }
-
-
 }

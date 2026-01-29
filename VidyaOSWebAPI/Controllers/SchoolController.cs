@@ -153,9 +153,9 @@ namespace VidyaOSWebAPI.Controllers
 
         // 6️⃣ Student Fee History
         [HttpGet]
-        public async Task<IActionResult> GetStudentFeeHistory(int studentId)
+        public async Task<IActionResult> GetStudentFeeHistory(int schoolId,int studentId)
         {
-            var result = await _schoolService.GetStudentFeeHistoryAsync(studentId);
+            var result = await _schoolService.GetStudentFeeHistoryAsync(schoolId,studentId);
             return Ok(result);
         }
         [HttpGet]

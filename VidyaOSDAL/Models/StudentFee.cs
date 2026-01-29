@@ -18,4 +18,6 @@ public partial class StudentFee
     public string? Status { get; set; }
 
     public DateOnly? PaidOn { get; set; }
+
+    public int? SchoolId { get; set; }
 }
