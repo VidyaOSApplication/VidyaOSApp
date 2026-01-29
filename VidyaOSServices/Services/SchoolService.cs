@@ -1277,10 +1277,11 @@ namespace VidyaOSServices.Services
             return ApiResult<List<LookUpDto>>.Ok(subjects);
         }
 
-        public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int examId, int classId, int sectionId, int subjectId, int? streamId)
+        public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int schoolId, int examId, int classId, int sectionId, int subjectId, int? streamId)
         {
+            // 🚀 Critical: Added .Where(s => s.SchoolId == schoolId)
             var query = _context.Students.AsNoTracking()
-                .Where(s => s.ClassId == classId && s.SectionId == sectionId);
+                .Where(s => s.SchoolId == schoolId && s.ClassId == classId && s.SectionId == sectionId);
 
             if (streamId.HasValue && streamId > 0)
             {
@@ -1295,6 +1296,7 @@ namespace VidyaOSServices.Services
                     RollNo = s.RollNo,
                     FullName = s.FirstName + " " + s.LastName,
                     AdmissionNo = s.AdmissionNo,
+                    // 🛡️ Ensure marks are also isolated by this student specifically
                     MarksObtained = _context.StudentMarks
                         .Where(m => m.ExamId == examId && m.SubjectId == subjectId && m.StudentId == s.StudentId)
                         .Select(m => (int?)m.MarksObtained).FirstOrDefault(),
