@@ -455,17 +455,22 @@ namespace VidyaOSServices.Services
             if (schoolId <= 0 || string.IsNullOrWhiteSpace(feeMonth))
                 return ApiResult<string>.Fail("Invalid input.");
 
-            // 1️⃣ Fetch all active students and existing fee records for this month in one go
+            // 1️⃣ Fetch all active students for THIS school
             var students = await _context.Students
                 .Where(s => s.SchoolId == schoolId && s.IsActive == true)
                 .ToListAsync();
 
+            if (!students.Any())
+                return ApiResult<string>.Fail("No active students found for this school.");
+
+            // 2️⃣ Check for existing fees for this month and school to prevent double-generation
+            // 🚀 Added SchoolId filter here for strict isolation
             var existingFeeStudentIds = await _context.StudentFees
-                    .Where(f => f.FeeMonth == feeMonth)
-                    .Select(f => (int)f.StudentId) // Explicitly cast to int
+                    .Where(f => f.SchoolId == schoolId && f.FeeMonth == feeMonth)
+                    .Select(f => (int)f.StudentId)
                     .ToListAsync();
 
-            // 2️⃣ Fetch all active fee structures for the school
+            // 3️⃣ Fetch all active fee structures for THIS school
             var feeStructures = await _context.FeeStructures
                 .Where(f => f.SchoolId == schoolId && f.IsActive == true)
                 .ToListAsync();
@@ -474,39 +479,40 @@ namespace VidyaOSServices.Services
 
             foreach (var student in students)
             {
-                // Skip if fee already exists (Checking in-memory list is much faster than DB)
+                // Skip if fee already exists for this specific student in this specific month
                 if (existingFeeStudentIds.Contains(student.StudentId))
                     continue;
 
-                // 3️⃣ Find the correct fee structure using the "Senior Class" fix
+                // 4️⃣ Match the correct fee structure (Senior Class Logic: Class + Stream)
                 bool isSenior = (student.ClassId == 11 || student.ClassId == 12);
 
                 var structure = feeStructures.FirstOrDefault(f =>
                     f.ClassId == student.ClassId &&
-                    (!isSenior || f.StreamId== student.StreamId)
+                    (!isSenior || f.StreamId == student.StreamId)
                 );
 
                 if (structure != null)
                 {
                     newFees.Add(new StudentFee
                     {
+                        SchoolId = schoolId, // 🚀 CRITICAL: Mapping the SchoolId for data isolation
                         StudentId = student.StudentId,
                         FeeMonth = feeMonth,
                         Amount = structure.MonthlyAmount,
                         Status = "Pending",
-                         // Good practice for tracking
                     });
                 }
             }
 
-            // 4️⃣ Bulk Add and Save
+            // 5️⃣ Bulk Insert
             if (newFees.Any())
             {
                 _context.StudentFees.AddRange(newFees);
                 await _context.SaveChangesAsync();
+                return ApiResult<string>.Ok($"{newFees.Count} fee records generated successfully for {feeMonth}.");
             }
 
-            return ApiResult<string>.Ok($"{newFees.Count} fees generated successfully.");
+            return ApiResult<string>.Ok("No new fees were generated. Records might already exist for all students.");
         }
 
 
