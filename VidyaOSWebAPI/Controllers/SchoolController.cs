@@ -318,5 +318,12 @@ namespace VidyaOSWebAPI.Controllers
 
             return Ok(result);
         }
+        
+        [HttpGet]
+        public async Task<IActionResult> GetHistory(int schoolId, int userId)
+        {
+            var result = await _schoolService.GetUserLeaveHistoryAsync(schoolId, userId);
+            return Ok(result);
+        }
     }
 }

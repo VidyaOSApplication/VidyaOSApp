@@ -1420,6 +1420,25 @@ namespace VidyaOSServices.Services
             }
         }
 
+        public async Task<ApiResult<List<UserLeaveHistoryDto>>> GetUserLeaveHistoryAsync(int schoolId, int userId)
+        {
+            var history = await _context.Leaves
+                .Where(l => l.SchoolId == schoolId && l.UserId == userId)
+                .OrderByDescending(l => l.AppliedOn) // Latest first
+                .Select(l => new UserLeaveHistoryDto
+                {
+                    LeaveId = l.LeaveId,
+                    FromDate = l.FromDate ?? DateOnly.FromDateTime(DateTime.Now),
+                    ToDate = l.ToDate ?? DateOnly.FromDateTime(DateTime.Now),
+                    Reason = l.Reason ?? "",
+                    Status = l.Status ?? "Pending",
+                    AppliedOn = l.AppliedOn ?? DateOnly.FromDateTime(DateTime.Now)
+                })
+                .ToListAsync();
+
+            return ApiResult<List<UserLeaveHistoryDto>>.Ok(history);
+        }
+
     }
 }
 
