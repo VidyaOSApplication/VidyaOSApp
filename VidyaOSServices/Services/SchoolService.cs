@@ -258,27 +258,26 @@ namespace VidyaOSServices.Services
                 Students = result
             };
         }
-        public async Task<ApiResult<LeaveResponse>> ApplyLeaveAsync(
-    ApplyLeaveRequest req)
+        public async Task<ApiResult<LeaveResponse>> ApplyLeaveAsync(ApplyLeaveRequest req)
         {
             if (req == null)
                 return ApiResult<LeaveResponse>.Fail("Request is required.");
 
+            // Validation: Prevent past dates or logic errors
             if (req.FromDate.Date > req.ToDate.Date)
-                return ApiResult<LeaveResponse>.Fail(
-                    "From date cannot be greater than To date."
-                );
+                return ApiResult<LeaveResponse>.Fail("From date cannot be greater than To date.");
 
             var fromDate = DateOnly.FromDateTime(req.FromDate);
             var toDate = DateOnly.FromDateTime(req.ToDate);
 
             bool isUpdated = false;
 
-            // 🔍 Check overlapping leave
+            // 🔍 Check for overlapping PENDING leave for this specific User (Teacher or Student)
             var existingLeave = await _context.Leaves
                 .FirstOrDefaultAsync(l =>
                     l.SchoolId == req.SchoolId &&
-                    l.UserId == req.StudentId &&
+                    l.UserId == req.UserId && // standardized to UserId
+                    l.Status == "Pending" &&
                     l.FromDate <= toDate &&
                     l.ToDate >= fromDate
                 );
@@ -287,11 +286,10 @@ namespace VidyaOSServices.Services
 
             if (existingLeave != null)
             {
-                // 🔁 UPDATE
+                // 🔁 UPDATE: Modify the existing pending request
                 existingLeave.FromDate = fromDate;
                 existingLeave.ToDate = toDate;
                 existingLeave.Reason = req.Reason;
-                existingLeave.Status = "Pending";
                 existingLeave.AppliedOn = DateOnly.FromDateTime(DateTime.UtcNow);
 
                 targetLeave = existingLeave;
@@ -299,11 +297,11 @@ namespace VidyaOSServices.Services
             }
             else
             {
-                // ➕ CREATE
+                // ➕ CREATE: New leave entry
                 targetLeave = new LeaveRequest
                 {
                     SchoolId = req.SchoolId,
-                    UserId = req.StudentId,
+                    UserId = req.UserId, // standardized to UserId
                     FromDate = fromDate,
                     ToDate = toDate,
                     Reason = req.Reason,
@@ -314,19 +312,24 @@ namespace VidyaOSServices.Services
                 _context.Leaves.Add(targetLeave);
             }
 
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
 
-            return ApiResult<LeaveResponse>.Ok(
-                new LeaveResponse
-                {
-                    LeaveId = targetLeave.LeaveId,
-                    Status = targetLeave.Status!,
-                    AppliedAt = DateOnly.FromDateTime(DateTime.UtcNow)
-                },
-                isUpdated
-                    ? "Leave updated successfully."
-                    : "Leave applied successfully."
-            );
+                return ApiResult<LeaveResponse>.Ok(
+                    new LeaveResponse
+                    {
+                        LeaveId = targetLeave.LeaveId,
+                        Status = targetLeave.Status!,
+                        AppliedAt = targetLeave.AppliedOn ?? DateOnly.FromDateTime(DateTime.UtcNow)
+                    },
+                    isUpdated ? "Leave updated successfully." : "Leave applied successfully."
+                );
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<LeaveResponse>.Fail("An error occurred while saving: " + ex.Message);
+            }
         }
 
         // ADMIN: APPROVE / REJECT LEAVE
