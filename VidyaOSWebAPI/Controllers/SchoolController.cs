@@ -6,6 +6,7 @@ using System.IO;
 using VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
 using VidyaOSServices.Services;
+using static VidyaOSHelper.SchoolHelper.SchoolHelper;
 
 namespace VidyaOSWebAPI.Controllers
 {
@@ -340,6 +341,25 @@ namespace VidyaOSWebAPI.Controllers
 
             if (!result.Success) return BadRequest(result);
             return Ok(result);
+        }
+
+        [Authorize(Roles = "Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetFeeStatus([FromQuery] int schoolId, [FromQuery] int studentId)
+        {
+            if (schoolId <= 0 || studentId <= 0)
+            {
+                return BadRequest(ApiResult<List<FeeHistoryDto>>.Fail("Invalid School or Student ID."));
+            }
+
+            var result = await _schoolService.GetStudentFeeStatusAsync(schoolId, studentId);
+
+            if (result.Success)
+            {
+                return Ok(result);
+            }
+
+            return BadRequest(result);
         }
     }
 }

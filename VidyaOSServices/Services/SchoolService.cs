@@ -1478,6 +1478,32 @@ namespace VidyaOSServices.Services
             return ApiResult<StudentAttendanceResponse>.Ok(response);
         }
 
+        public async Task<ApiResult<List<FeeHistoryDto>>> GetStudentFeeStatusAsync(int schoolId, int studentId)
+        {
+            var school = await _context.Schools.FirstOrDefaultAsync(s => s.SchoolId == schoolId);
+            string schoolCode = school?.SchoolCode ?? "SCH";
+
+            var fees = await _context.StudentFees
+                .Where(f => f.SchoolId == schoolId && f.StudentId == studentId)
+                .OrderBy(f => f.StudentFeeId) // Order by month sequence
+                .Select(f => new FeeHistoryDto
+                {
+                    StudentFeeId = f.StudentFeeId,
+                    FeeMonth = f.FeeMonth ?? "",
+                    Amount = f.Amount ?? 0,
+                    Status = f.Status ?? "Pending", // Added Status to DTO
+                    PaidOn = f.PaidOn,
+                    PaymentMode = f.PaymentMode ?? "N/A",
+                    // Receipt logic only applies if PaidOn has a value
+                    ReceiptNo = f.Status == "Paid" && f.PaidOn.HasValue
+                                ? $"REC/{schoolCode}/{f.PaidOn.Value:yyyyMMdd}/{f.StudentFeeId}"
+                                : ""
+                })
+                .ToListAsync();
+
+            return ApiResult<List<FeeHistoryDto>>.Ok(fees);
+        }
+
     }
 }
 
