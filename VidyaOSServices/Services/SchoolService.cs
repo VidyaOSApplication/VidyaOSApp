@@ -1442,6 +1442,42 @@ namespace VidyaOSServices.Services
             return ApiResult<List<UserLeaveHistoryDto>>.Ok(history);
         }
 
+        public async Task<ApiResult<StudentAttendanceResponse>> GetStudentMonthlyAttendanceAsync(int userId, int month, int year)
+        {
+            // 1. Fetch records for the specific user and month/year
+            // EF Core translates .Month and .Year of DateOnly directly to SQL
+            var records = await _context.Attendances
+                .Where(a => a.UserId == userId &&
+                            a.AttendanceDate.HasValue &&
+                            a.AttendanceDate.Value.Month == month &&
+                            a.AttendanceDate.Value.Year == year)
+                .OrderBy(a => a.AttendanceDate)
+                .Select(a => new StudentAttendanceRecordDto
+                {
+                    Date = a.AttendanceDate.Value,
+                    Status = a.Status ?? "Absent"
+                })
+                .ToListAsync();
+
+            // 2. Calculate Summary Statistics
+            int total = records.Count;
+            int present = records.Count(r => r.Status == "Present");
+            int absent = records.Count(r => r.Status == "Absent");
+
+            decimal percentage = total > 0 ? (decimal)present / total * 100 : 0;
+
+            var response = new StudentAttendanceResponse
+            {
+                TotalDays = total,
+                PresentCount = present,
+                AbsentCount = absent,
+                AttendancePercentage = Math.Round(percentage, 2),
+                Records = records
+            };
+
+            return ApiResult<StudentAttendanceResponse>.Ok(response);
+        }
+
     }
 }
 

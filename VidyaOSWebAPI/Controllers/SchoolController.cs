@@ -325,5 +325,21 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GetUserLeaveHistoryAsync(schoolId, userId);
             return Ok(result);
         }
+
+        [Authorize(Roles = "Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetAttendanceHistory(
+        [FromQuery] int userId,
+        [FromQuery] int month,
+        [FromQuery] int year)
+        {
+            if (userId <= 0 || month < 1 || month > 12)
+                return BadRequest("Invalid parameters. Month must be 1-12.");
+
+            var result = await _schoolService.GetStudentMonthlyAttendanceAsync(userId, month, year);
+
+            if (!result.Success) return BadRequest(result);
+            return Ok(result);
+        }
     }
 }
