@@ -37,13 +37,24 @@ namespace VidyaOSServices.Services
                 if (string.IsNullOrWhiteSpace(req.AdminUsername))
                     return ApiResult<RegisterSchoolResponse>.Fail("Admin username is required.");
 
-                // Generate School Code if not provided
-                var schoolCode = string.IsNullOrWhiteSpace(req.SchoolCode)
-                    ? req.SchoolName.Substring(0, Math.Min(3, req.SchoolName.Length)).ToUpper() + new Random().Next(100, 999)
-                    : req.SchoolCode.Trim().ToUpper();
+                // ---------- FIXED SCHOOL CODE GENERATION ----------
+                var schoolCode = "";
+                if (string.IsNullOrWhiteSpace(req.SchoolCode))
+                {
+                    // Split by space, filter out empty strings
+                    var words = req.SchoolName.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-                if (await _context.Schools.AnyAsync(s => s.SchoolCode == schoolCode))
-                    return ApiResult<RegisterSchoolResponse>.Fail("School code already exists.");
+                    // Extract the first character of each word, ensuring it's a valid character
+                    var initials = string.Concat(words.Select(w => w[0])).ToUpper();
+
+                    // Append random 3-digit number (It's okay if this results in a duplicate as per your requirement)
+                    schoolCode = initials + new Random().Next(100, 999);
+                }
+                else
+                {
+                    schoolCode = req.SchoolCode.Trim().ToUpper();
+                }
+
 
                 // 2. ---------- CREATE SCHOOL PROFILE ----------
                 var school = new School
@@ -129,7 +140,6 @@ namespace VidyaOSServices.Services
             catch (Exception ex)
             {
                 await tx.RollbackAsync();
-                // Log the actual exception here
                 return ApiResult<RegisterSchoolResponse>.Fail($"Registration failed: {ex.Message}");
             }
         }
