@@ -1371,143 +1371,71 @@ namespace VidyaOSServices.Services
             }
         }
 
-        private async Task<StudentResultSummaryDto?> GetStudentResultDataInternalAsync(int studentId, int examId)
-        {
-            // 1. Student + Class
-            var studentData = await (from s in _context.Students
-                                     join c in _context.Classes on s.ClassId equals c.ClassId
-                                     where s.StudentId == studentId
-                                     select new
-                                     {
-                                         s.FirstName,
-                                         s.LastName,
-                                         s.RollNo,
-                                         s.AdmissionNo,
-                                         c.ClassName
-                                     }).FirstOrDefaultAsync();
-
-            if (studentData == null) return null;
-
-            // 2. Exam Name
-            var examName = await _context.Exams
-                .Where(e => e.ExamId == examId)
-                .Select(e => e.ExamName)
-                .FirstOrDefaultAsync() ?? "Examination";
-
-            // 3. Marks
-            var marksList = await (from m in _context.StudentMarks
-                                   join sub in _context.Subjects on m.SubjectId equals sub.SubjectId
-                                   where m.StudentId == studentId && m.ExamId == examId
-                                   select new SubjectMarkDto
-                                   {
-                                       SubjectName = sub.SubjectName,
-                                       Obtained = m.MarksObtained,
-                                       Max = m.MaxMarks
-                                   }).ToListAsync();
-
-            if (!marksList.Any()) return null;
-
-            int totalObtained = marksList.Sum(x => x.Obtained);
-            int totalMax = marksList.Sum(x => x.Max);
-
-            return new StudentResultSummaryDto
-            {
-                FullName = $"{studentData.FirstName} {studentData.LastName}",
-                RollNo = studentData.RollNo?.ToString() ?? "N/A",
-                AdmissionNo = studentData.AdmissionNo ?? "N/A",
-                ExamName = examName,
-                ClassName = studentData.ClassName,
-                Marks = marksList,
-                TotalObtained = totalObtained,
-                TotalMax = totalMax,
-                Percentage = totalMax > 0
-                    ? Math.Round((double)totalObtained / totalMax * 100, 2)
-                    : 0
-            };
-        }
-
 
         public async Task<ApiResult<StudentResultSummaryDto>> GetStudentResultSummaryAsync(int studentId, int examId)
         {
             try
             {
-                var summary = await GetStudentResultDataInternalAsync(studentId, examId);
+                // 1. Get Student and Class details using a Manual Join to avoid Navigation Property errors
+                var studentData = await (from s in _context.Students
+                                         join c in _context.Classes on s.ClassId equals c.ClassId
+                                         where s.StudentId == studentId
+                                         select new
+                                         {
+                                             s.FirstName,
+                                             s.LastName,
+                                             s.RollNo,
+                                             s.AdmissionNo,
+                                             c.ClassName
+                                         }).FirstOrDefaultAsync();
 
-                if (summary == null)
-                    return ApiResult<StudentResultSummaryDto>.Fail("No result found.");
+                if (studentData == null) return ApiResult<StudentResultSummaryDto>.Fail("Student not found.");
+
+                // 2. Get Exam Name simply by ID
+                var examName = await _context.Exams
+                    .Where(e => e.ExamId == examId)
+                    .Select(e => e.ExamName)
+                    .FirstOrDefaultAsync() ?? "Examination";
+
+                // 3. Get Marks and Subject Names using Manual Join
+                // This avoids looking for the "Subject" virtual property that triggers Error 207
+                var marksList = await (from m in _context.StudentMarks
+                                       join sub in _context.Subjects on m.SubjectId equals sub.SubjectId
+                                       where m.StudentId == studentId && m.ExamId == examId
+                                       select new SubjectMarkDto
+                                       {
+                                           SubjectName = sub.SubjectName,
+                                           Obtained = m.MarksObtained, // Ensure this matches your DB column
+                                           Max = m.MaxMarks          // Ensure this matches your DB column
+                                       }).ToListAsync();
+
+                if (!marksList.Any()) return ApiResult<StudentResultSummaryDto>.Fail("No marks found for this student in the selected exam.");
+
+                // 4. Calculations
+                int totalObtained = marksList.Sum(x => x.Obtained);
+                int totalMax = marksList.Sum(x => x.Max);
+
+                var summary = new StudentResultSummaryDto
+                {
+                    FullName = $"{studentData.FirstName} {studentData.LastName}",
+                    RollNo = studentData.RollNo?.ToString() ?? "N/A",
+                    AdmissionNo = studentData.AdmissionNo ?? "N/A",
+                    ExamName = examName,
+                    ClassName = studentData.ClassName,
+                    Marks = marksList,
+                    TotalObtained = totalObtained,
+                    TotalMax = totalMax,
+                    Percentage = totalMax > 0 ? Math.Round((double)totalObtained / totalMax * 100, 2) : 0
+                };
 
                 return ApiResult<StudentResultSummaryDto>.Ok(summary);
             }
             catch (Exception ex)
             {
+                // This will now catch the specific error if a column name is still misspelled
                 return ApiResult<StudentResultSummaryDto>.Fail("Internal Error: " + ex.Message);
             }
         }
-
-        public async Task<byte[]?> GenerateStudentReportCardPdfAsync(int studentId, int examId)
-        {
-            var summary = await GetStudentResultDataInternalAsync(studentId, examId);
-
-            if (summary == null) return null;
-
-            using var stream = new MemoryStream();
-
-            QuestPDF.Fluent.Document.Create(container =>
-            {
-                container.Page(page =>
-                {
-                    page.Margin(40);
-
-                    page.Header()
-                        .Text($"{summary.ExamName} - Report Card")
-                        .FontSize(20)
-                        .Bold();
-
-                    page.Content().Column(column =>
-                    {
-                        column.Spacing(10);
-
-                        column.Item().Text($"Name: {summary.FullName}");
-                        column.Item().Text($"Roll No: {summary.RollNo}");
-                        column.Item().Text($"Admission No: {summary.AdmissionNo}");
-                        column.Item().Text($"Class: {summary.ClassName}");
-
-                        column.Item().Table(table =>
-                        {
-                            table.ColumnsDefinition(columns =>
-                            {
-                                columns.RelativeColumn(3);
-                                columns.RelativeColumn(1);
-                                columns.RelativeColumn(1);
-                            });
-
-                            table.Header(header =>
-                            {
-                                header.Cell().Text("Subject").Bold();
-                                header.Cell().Text("Obtained").Bold();
-                                header.Cell().Text("Max").Bold();
-                            });
-
-                            foreach (var mark in summary.Marks)
-                            {
-                                table.Cell().Text(mark.SubjectName);
-                                table.Cell().Text(mark.Obtained.ToString());
-                                table.Cell().Text(mark.Max.ToString());
-                            }
-                        });
-
-                        column.Item().Text($"Total: {summary.TotalObtained} / {summary.TotalMax}")
-                            .Bold();
-
-                        column.Item().Text($"Percentage: {summary.Percentage}%")
-                            .Bold();
-                    });
-                });
-            }).GeneratePdf(stream);
-
-            return stream.ToArray();
-        }
-
 
 
         public async Task<ApiResult<List<UserLeaveHistoryDto>>> GetUserLeaveHistoryAsync(int schoolId, int userId)
