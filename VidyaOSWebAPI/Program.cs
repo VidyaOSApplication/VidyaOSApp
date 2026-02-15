@@ -6,6 +6,8 @@ using System.Text;
 using VidyaOSDAL.Models;
 using VidyaOSHelper;
 using VidyaOSServices.Services;
+using QuestPDF.Infrastructure;
+
 
 namespace VidyaOSWebAPI
 {
@@ -111,6 +113,8 @@ namespace VidyaOSWebAPI
             builder.Services.AddScoped<TeacherHelper>();
             builder.Services.AddScoped<ExamService>();
             builder.Services.AddScoped<VidyaOSHelper.SchoolHelper.SchoolHelper>();
+            QuestPDF.Settings.License = LicenseType.Community;
+
 
             var app = builder.Build();
 

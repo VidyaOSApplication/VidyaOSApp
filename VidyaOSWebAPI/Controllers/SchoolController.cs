@@ -361,5 +361,17 @@ namespace VidyaOSWebAPI.Controllers
 
             return BadRequest(result);
         }
+
+        [HttpGet]
+        public async Task<IActionResult> GenerateReportCardPdf(int studentId, int examId)
+        {
+            var pdfBytes = await _schoolService.GenerateStudentReportCardPdfAsync(studentId, examId);
+
+            if (pdfBytes == null)
+                return NotFound("Result not found.");
+
+            return File(pdfBytes, "application/pdf", $"ReportCard_{studentId}.pdf");
+        }
+
     }
 }
