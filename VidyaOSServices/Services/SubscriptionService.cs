@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
 using static VidyaOSHelper.SchoolHelper.SchoolHelper;
 
@@ -93,5 +94,33 @@ namespace VidyaOSServices.Services
                 return ApiResult<bool>.Fail("Activation failed: " + ex.Message);
             }
         }
+
+            public async Task<ApiResult<List<SchoolListDto>>> GetAllSchoolsAsync()
+        {
+            try
+            {
+                // Retrieves schools from the database
+                var schools = await _context.Schools
+                    .Select(s => new SchoolListDto
+                    {
+                        SchoolId = s.SchoolId,
+                        SchoolName = s.SchoolName,
+                        SchoolCode = s.SchoolCode,
+                        IsActive = s.IsActive ?? false
+                    })
+                    .OrderBy(s => s.SchoolName)
+                    .ToListAsync();
+
+                return ApiResult<List<SchoolListDto>>.Ok(schools);
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<List<SchoolListDto>>.Fail("Error fetching school list: " + ex.Message);
+            }
+        }
+
+        // Simple DTO for the list
+        
     }
-}
+    }
+

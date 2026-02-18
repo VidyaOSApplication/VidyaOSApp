@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using VidyaOSDAL.DTOs;
 using VidyaOSServices.Services;
 
 namespace VidyaOSWebAPI.Controllers
@@ -31,13 +32,21 @@ namespace VidyaOSWebAPI.Controllers
             if (!result.Success) return BadRequest(result);
             return Ok(result);
         }
+        [HttpGet]
+        public async Task<IActionResult> GetAllSchools()
+        {
+            // Calls the service to get all schools registered in VidyaOS
+            var result = await _subscriptionService.GetAllSchoolsAsync();
+
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
     }
 
-    // Request DTO for assignment
-    public class ActivateSubRequest
-    {
-        public int SchoolId { get; set; }
-        public int PlanId { get; set; }
-    }
+   
 }
 
