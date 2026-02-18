@@ -24,6 +24,7 @@ namespace VidyaOSServices.Services
 
         public async Task<ApiResult<LoginResponse>> LoginAsync(LoginRequest req)
         {
+            // 1. Normalize and find the user
             string normalizedUsername = req.Username.Trim().ToLower();
 
             var user = await _context.Users
@@ -34,9 +35,30 @@ namespace VidyaOSServices.Services
             if (user == null)
                 return ApiResult<LoginResponse>.Fail("Invalid username or password.");
 
+            // 2. Verify Password
             if (!BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
                 return ApiResult<LoginResponse>.Fail("Invalid username or password.");
 
+            // 🚀 3. SUBSCRIPTION GUARD
+            // SuperAdmins are typically excluded from subscription blocks to prevent lockout.
+            if (user.Role != "SuperAdmin")
+            {
+                // Get the current date in DateOnly format to match database types
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+                var activeSub = await _context.Subscriptions
+                    .Where(s => s.SchoolId == user.SchoolId && s.IsActive == true)
+                    .OrderByDescending(s => s.EndDate)
+                    .FirstOrDefaultAsync();
+
+                // Validate that a subscription exists and the EndDate is not in the past
+                if (activeSub == null || activeSub.EndDate < today)
+                {
+                    return ApiResult<LoginResponse>.Fail("Your VidyaOS subscription has expired or is inactive. Please contact support.");
+                }
+            }
+
+            // 4. Generate Token and Return Response
             string token = _authHelper.GenerateJwt(user);
 
             return ApiResult<LoginResponse>.Ok(

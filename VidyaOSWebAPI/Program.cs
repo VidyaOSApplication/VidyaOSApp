@@ -112,6 +112,7 @@ namespace VidyaOSWebAPI
             builder.Services.AddScoped<StudentHelper>();
             builder.Services.AddScoped<TeacherHelper>();
             builder.Services.AddScoped<ExamService>();
+            builder.Services.AddScoped<SubscriptionService>();
             builder.Services.AddScoped<VidyaOSHelper.SchoolHelper.SchoolHelper>();
             QuestPDF.Settings.License = LicenseType.Community;
 
