@@ -1519,6 +1519,58 @@ namespace VidyaOSServices.Services
             return ApiResult<List<FeeHistoryDto>>.Ok(fees);
         }
 
+        public async Task<ApiResult<AdminDashboardSummaryDto>> GetDashboardSummaryAsync(int schoolId)
+        {
+            try
+            {
+                // 1. Get counts for Students and Teachers
+                int studentCount = await _context.Students.CountAsync(s => s.SchoolId == schoolId && s.IsActive == true);
+                int teacherCount = await _context.Teachers.CountAsync(t => t.SchoolId == schoolId && t.IsActive == true);
+
+                // 2. Get the active subscription and plan details
+                var subData = await _context.Subscriptions
+                    .Where(s => s.SchoolId == schoolId && s.IsActive == true)
+                    .Join(_context.SubscriptionPlans,
+                        sub => sub.PlanId,
+                        plan => plan.PlanId,
+                        (sub, plan) => new { sub, plan })
+                    .OrderByDescending(x => x.sub.EndDate)
+                    .Select(x => new SubscriptionSummaryDto
+                    {
+                        PlanName = x.plan.PlanName,
+                        EndDate = x.sub.EndDate,
+                        MaxStudents = x.plan.MaxStudents ?? 0
+                    })
+                    .FirstOrDefaultAsync();
+
+                return ApiResult<AdminDashboardSummaryDto>.Ok(new AdminDashboardSummaryDto
+                {
+                    TotalStudents = studentCount,
+                    TotalTeachers = teacherCount,
+                    Subscription = subData
+                });
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<AdminDashboardSummaryDto>.Fail("Error loading dashboard data: " + ex.Message);
+            }
+        }
+
+        // --- DTOs ---
+        public class AdminDashboardSummaryDto
+        {
+            public int TotalStudents { get; set; }
+            public int TotalTeachers { get; set; }
+            public SubscriptionSummaryDto? Subscription { get; set; }
+        }
+
+        public class SubscriptionSummaryDto
+        {
+            public string PlanName { get; set; }
+            public DateOnly? EndDate { get; set; }
+            public int MaxStudents { get; set; }
+        }
+
     }
 }
 

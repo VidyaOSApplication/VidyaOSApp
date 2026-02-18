@@ -361,7 +361,15 @@ namespace VidyaOSWebAPI.Controllers
 
             return BadRequest(result);
         }
+        [HttpGet]
+        public async Task<IActionResult> GetDashboardSummary(int schoolId)
+        {
+            if (schoolId <= 0)
+                return BadRequest(ApiResult<string>.Fail("Invalid School ID."));
 
+            var result = await _schoolService.GetDashboardSummaryAsync(schoolId);
+            return result.Success ? Ok(result) : NotFound(result);
+        }
 
     }
 }
