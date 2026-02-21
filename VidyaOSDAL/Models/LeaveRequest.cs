@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace VidyaOSDAL.Models;
 
-public partial class Leaf
+public partial class LeaveRequest
 {
     public int LeaveId { get; set; }
 
