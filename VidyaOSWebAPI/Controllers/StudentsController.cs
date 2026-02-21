@@ -14,16 +14,16 @@ namespace VidyaOSWebAPI.Controllers
         {
            _studentService = service;
         }
-        //[HttpGet]
-        //public IActionResult GetStudentsForAttendence()
-        //{
-        //    var students = _studentService.GetAllStudents();
-        //    if (students != null && students.Count > 0)
-        //    {
-        //        return Ok(students);
-        //    }
-        //    return NotFound("No students found");
-        //}
+        [HttpGet]
+        public IActionResult GetStudentsForAttendence()
+        {
+            var students = _studentService.GetAllStudents();
+            if (students != null && students.Count > 0)
+            {
+                return Ok(students);
+            }
+            return NotFound("No students found");
+        }
 
         [HttpPost]
         public async Task<IActionResult> RegisterStudent(
