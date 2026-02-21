@@ -22,87 +22,120 @@ namespace VidyaOSServices.Services
             _studentHelper = helper;
         }
 
-        public async Task<ApiResult<List<Student>>> GetAllStudentsBySchoolAsync(int schoolId)
+        public List<Student> GetAllStudents()
         {
+            List<Student> students = new List<Student>();
             try
             {
-                var students = await _context.Students
-                    .Where(s => s.SchoolId == schoolId)
-                    .AsNoTracking()
-                    .ToListAsync();
-                return ApiResult<List<Student>>.Ok(students);
+                students = _context.Students.ToList();
+                return students;
             }
             catch (Exception ex)
             {
-                return ApiResult<List<Student>>.Fail("Error fetching students: " + ex.Message);
+
+                return students;
             }
         }
-        public async Task<ApiResult<StudentRegisterResponse>> RegisterStudentAsync(StudentRegisterRequest req)
+        public async Task<ApiResult<StudentRegisterResponse>> RegisterStudentAsync(
+    StudentRegisterRequest req)
         {
-            if (req == null) return ApiResult<StudentRegisterResponse>.Fail("Request cannot be null.");
-            if (req.SchoolId <= 0) return ApiResult<StudentRegisterResponse>.Fail("Invalid school.");
-
-            // ---------- STREAM VALIDATION (New Logic) ----------
-            if (req.ClassId == 11 || req.ClassId == 12)
+            // ---------- Validation ----------
+            if ((req.ClassId == 11 || req.ClassId == 12) && req.StreamId == null)
             {
-                if (req.StreamId == null)
-                    return ApiResult<StudentRegisterResponse>.Fail("Stream is required for class 11 and 12.");
-
-                // Ensure the stream exists for THIS school and THIS class
-                var isValidStream = await _context.Streams.AnyAsync(st =>
-                    st.StreamId == req.StreamId &&
-                    st.SchoolId == req.SchoolId &&
-                    st.ClassId == req.ClassId);
-
-                if (!isValidStream)
-                    return ApiResult<StudentRegisterResponse>.Fail("Selected stream is not valid for this class.");
+                return ApiResult<StudentRegisterResponse>.Fail("Stream is required for class 11 and 12");
             }
-            else
-            {
-                req.StreamId = null; // Ensure stream is null for lower classes
-            }
+            if (req == null)
+                return ApiResult<StudentRegisterResponse>.Fail("Request cannot be null.");
 
-            // ---------- BASIC VALIDATION ----------
+            if (req.SchoolId <= 0)
+                return ApiResult<StudentRegisterResponse>.Fail("Invalid school.");
+
             if (string.IsNullOrWhiteSpace(req.FirstName))
                 return ApiResult<StudentRegisterResponse>.Fail("First name is required.");
 
+            if (req.DOB == default)
+                return ApiResult<StudentRegisterResponse>.Fail("Date of birth is required.");
+
+            // ---------- DOB & AGE VALIDATION ----------
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var dob = DateOnly.FromDateTime(req.DOB);
 
-            if (dob > today) return ApiResult<StudentRegisterResponse>.Fail("Date of birth cannot be in the future.");
+            if (dob > today)
+                return ApiResult<StudentRegisterResponse>
+                    .Fail("Date of birth cannot be in the future.");
 
             int age = today.Year - dob.Year;
-            if (dob > today.AddYears(-age)) age--;
-            if (age < 3) return ApiResult<StudentRegisterResponse>.Fail("Student must be at least 3 years old.");
+            if (dob > today.AddYears(-age))
+                age--;
 
-            if (!System.Text.RegularExpressions.Regex.IsMatch(req.ParentPhone.Trim(), @"^[6-9]\d{9}$"))
-                return ApiResult<StudentRegisterResponse>.Fail("Invalid 10-digit parent phone number.");
+            if (age < 3)
+                return ApiResult<StudentRegisterResponse>
+                    .Fail("Student should not be less than 3 years old.");
 
-            // ---------- DUPLICATE CHECK ----------
+            if (req.ClassId <= 0 || req.SectionId <= 0)
+                return ApiResult<StudentRegisterResponse>.Fail("Class and section are required.");
+
+            if (string.IsNullOrWhiteSpace(req.AcademicYear))
+                return ApiResult<StudentRegisterResponse>.Fail("Academic year is required.");
+
+            if (string.IsNullOrWhiteSpace(req.ParentPhone))
+                return ApiResult<StudentRegisterResponse>.Fail("Parent phone is required.");
+
+            if (!System.Text.RegularExpressions.Regex.IsMatch(
+                req.ParentPhone.Trim(), @"^[6-9]\d{9}$"))
+            {
+                return ApiResult<StudentRegisterResponse>
+                    .Fail("Invalid parent phone number.");
+            }
+
+            // ---------- Duplicate Check ----------
             bool exists = await _context.Students.AnyAsync(s =>
                 s.SchoolId == req.SchoolId &&
                 s.AcademicYear == req.AcademicYear &&
                 s.FirstName!.ToLower() == req.FirstName.ToLower() &&
-                s.Dob == dob &&
+                s.Dob == DateOnly.FromDateTime(req.DOB) &&
                 s.ParentPhone == req.ParentPhone
             );
 
-            if (exists) return ApiResult<StudentRegisterResponse>.Fail("Student already exists with same name, DOB, and parent phone.");
+            if (exists)
+            {
+                return ApiResult<StudentRegisterResponse>.Fail(
+                    "Student already exists with same name, date of birth and parent mobile number."
+                );
+            }
 
             using var tx = await _context.Database.BeginTransactionAsync();
+
             try
             {
-                var school = await _context.Schools.FirstOrDefaultAsync(s => s.SchoolId == req.SchoolId);
-                if (school == null) return ApiResult<StudentRegisterResponse>.Fail("School not found.");
+                // ---------- School ----------
+                var school = await _context.Schools
+                    .FirstOrDefaultAsync(s => s.SchoolId == req.SchoolId);
 
-                // Helper Generations
-                string admissionNo = await _studentHelper.GenerateAdmissionNoAsync(req.SchoolId, req.AdmissionDate.Year, school.SchoolCode!);
+                if (school == null)
+                    return ApiResult<StudentRegisterResponse>.Fail("School not found.");
+
+                // ---------- Admission No ----------
+                int admissionYear = req.AdmissionDate.Year;
+
+                string admissionNo = await _studentHelper.GenerateAdmissionNoAsync(
+                    req.SchoolId,
+                    admissionYear,
+                    school.SchoolCode!
+                );
+
+                // ---------- Roll No ----------
                 int rollNo = await _studentHelper.GenerateRollNoAsync(req.SectionId);
-                string username = await _studentHelper.GenerateStudentUsernameAsync(req.FirstName, req.LastName);
+
+                // ---------- USERNAME (AUTO FROM NAME) ----------
+                string username = await _studentHelper.GenerateStudentUsernameAsync(
+                    req.FirstName, req.LastName);
+
+                // ---------- PASSWORD (FirstName + BirthYear) ----------
                 string tempPassword = $"{req.FirstName}{req.DOB.Year}";
                 string passwordHash = BCrypt.Net.BCrypt.HashPassword(tempPassword);
 
-                // Create User record
+                // ---------- User ----------
                 var user = new User
                 {
                     SchoolId = req.SchoolId,
@@ -111,7 +144,7 @@ namespace VidyaOSServices.Services
                     Role = "Student",
                     Email = req.Email,
                     Phone = req.ParentPhone,
-                    IsFirstLogin = true,
+                    IsFirstLogin = true,     // 🔥 force change
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -119,17 +152,17 @@ namespace VidyaOSServices.Services
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
 
-                // Create Student record
+                // ---------- Student ----------
                 var student = new Student
                 {
                     SchoolId = req.SchoolId,
-                    UserId = user.UserId,
+                    UserId = user.UserId,           // 🔥 RELATION
                     AdmissionNo = admissionNo,
                     RollNo = rollNo,
                     FirstName = req.FirstName,
                     LastName = req.LastName,
                     Gender = req.Gender,
-                    Dob = dob,
+                    Dob = DateOnly.FromDateTime(req.DOB),
                     ClassId = req.ClassId,
                     SectionId = req.SectionId,
                     StreamId = req.StreamId,
@@ -151,33 +184,29 @@ namespace VidyaOSServices.Services
 
                 await tx.CommitAsync();
 
-                return ApiResult<StudentRegisterResponse>.Ok(new StudentRegisterResponse
-                {
-                    StudentId = student.StudentId,
-                    AdmissionNo = admissionNo,
-                    Username = username,
-                    TempPassword = tempPassword
-                }, "Student registered successfully.");
+                return ApiResult<StudentRegisterResponse>.Ok(
+                    new StudentRegisterResponse
+                    {
+                        StudentId = student.StudentId,
+                        AdmissionNo = admissionNo,
+                        Username = username,
+                        TempPassword = tempPassword
+                    },
+                    "Student registered successfully."
+                );
             }
-            catch (Exception ex)
+            catch
             {
                 await tx.RollbackAsync();
-                return ApiResult<StudentRegisterResponse>.Fail("Database error: " + ex.Message);
+                throw;
             }
+
         }
-        public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(
-            int schoolId, int examId, int classId, int sectionId, int subjectId, int? streamId)
+        public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int examId, int classId, int subjectId, int? sectionId)
         {
-            var query = _context.Students.AsNoTracking()
-                .Where(s => s.SchoolId == schoolId && s.ClassId == classId && s.SectionId == sectionId && s.IsActive == true);
-
-            if ((classId == 11 || classId == 12) && streamId.HasValue && streamId > 0)
-            {
-                query = query.Where(s => s.StreamId == streamId);
-            }
-
-            var students = await query
-                .OrderBy(s => s.RollNo)
+            var students = await _context.Students
+                .Where(s => s.ClassId == classId && (!sectionId.HasValue || s.SectionId == sectionId))
+                .OrderBy(s => s.RollNo) // Important: Sort by Roll No
                 .Select(s => new BulkMarksEntryDto
                 {
                     StudentId = s.StudentId,
@@ -186,14 +215,13 @@ namespace VidyaOSServices.Services
                     AdmissionNo = s.AdmissionNo,
                     MarksObtained = _context.StudentMarks
                         .Where(m => m.ExamId == examId && m.SubjectId == subjectId && m.StudentId == s.StudentId)
-                        .Select(m => (int?)m.MarksObtained).FirstOrDefault(),
-                    // Source MaxMarks from ExamSubjects configuration
-                    MaxMarks = _context.ExamSubjects
-                        .Where(es => es.ExamId == examId && es.SubjectId == subjectId && es.ClassId == classId)
-                        .Select(es => es.MaxMarks).FirstOrDefault()
+                        .Select(m => m.MarksObtained).FirstOrDefault(),
+                    MaxMarks = _context.StudentMarks
+                        .Where(m => m.ExamId == examId && m.SubjectId == subjectId && m.StudentId == s.StudentId)
+                        .Select(m => m.MaxMarks).FirstOrDefault() == 0 ? 100 : _context.StudentMarks
+                        .Where(m => m.ExamId == examId && m.SubjectId == subjectId && m.StudentId == s.StudentId)
+                        .Select(m => m.MaxMarks).FirstOrDefault()
                 }).ToListAsync();
-
-            students.ForEach(s => { if (s.MaxMarks == 0) s.MaxMarks = 100; });
 
             return ApiResult<List<BulkMarksEntryDto>>.Ok(students);
         }
