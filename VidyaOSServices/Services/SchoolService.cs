@@ -30,27 +30,17 @@ namespace VidyaOSServices.Services
         public async Task<ApiResult<RegisterSchoolResponse>> RegisterSchoolAsync(RegisterSchoolRequest req)
         {
             using var tx = await _context.Database.BeginTransactionAsync();
-
             try
             {
-                // 1. ---------- ESSENTIAL VALIDATION ----------
                 if (string.IsNullOrWhiteSpace(req.SchoolName))
                     return ApiResult<RegisterSchoolResponse>.Fail("School name is required.");
 
-                if (string.IsNullOrWhiteSpace(req.AdminUsername))
-                    return ApiResult<RegisterSchoolResponse>.Fail("Admin username is required.");
-
-                // ---------- FIXED SCHOOL CODE GENERATION ----------
+                // School Code Generation Logic
                 var schoolCode = "";
                 if (string.IsNullOrWhiteSpace(req.SchoolCode))
                 {
-                    // Split by space, filter out empty strings
                     var words = req.SchoolName.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-                    // Extract the first character of each word, ensuring it's a valid character
                     var initials = string.Concat(words.Select(w => w[0])).ToUpper();
-
-                    // Append random 3-digit number (It's okay if this results in a duplicate as per your requirement)
                     schoolCode = initials + new Random().Next(100, 999);
                 }
                 else
@@ -58,8 +48,6 @@ namespace VidyaOSServices.Services
                     schoolCode = req.SchoolCode.Trim().ToUpper();
                 }
 
-
-                // 2. ---------- CREATE SCHOOL PROFILE ----------
                 var school = new School
                 {
                     SchoolName = req.SchoolName.Trim(),
@@ -74,20 +62,21 @@ namespace VidyaOSServices.Services
                 };
 
                 _context.Schools.Add(school);
-                await _context.SaveChangesAsync(); // Generates SchoolId
+                await _context.SaveChangesAsync();
 
-                // 3. ---------- AUTO-SEED INFRASTRUCTURE ----------
                 var classDefs = new List<(int Id, string Name)>
-        {
-            (15, "Nursery"), (13, "LKG"), (14, "UKG"),
-            (1, "Class 1"), (2, "Class 2"), (3, "Class 3"), (4, "Class 4"),
-            (5, "Class 5"), (6, "Class 6"), (7, "Class 7"), (8, "Class 8"),
-            (9, "Class 9"), (10, "Class 10"), (11, "Class 11"), (12, "Class 12")
-        };
+                {
+                    (15, "Nursery"), (13, "LKG"), (14, "UKG"),
+                    (1, "Class 1"), (2, "Class 2"), (3, "Class 3"), (4, "Class 4"),
+                    (5, "Class 5"), (6, "Class 6"), (7, "Class 7"), (8, "Class 8"),
+                    (9, "Class 9"), (10, "Class 10"), (11, "Class 11"), (12, "Class 12")
+                };
+
+                // Fetch Master Streams once to use in loop
+                var masterStreams = await _context.StreamMasters.ToListAsync();
 
                 foreach (var cls in classDefs)
                 {
-                    // A. Create Class
                     _context.Classes.Add(new Class
                     {
                         SchoolId = school.SchoolId,
@@ -96,25 +85,25 @@ namespace VidyaOSServices.Services
                         IsActive = true
                     });
 
-                    // B. Create Sections A (ID 1) and B (ID 2)
                     _context.Sections.AddRange(
                         new Section { SchoolId = school.SchoolId, ClassId = cls.Id, SectionId = 1, SectionName = "A", IsActive = true },
                         new Section { SchoolId = school.SchoolId, ClassId = cls.Id, SectionId = 2, SectionName = "B", IsActive = true }
                     );
 
-                    // C. Create Streams for Class 11 and 12
+                    // MODIFIED: Create Streams using StreamMasterId
                     if (cls.Id == 11 || cls.Id == 12)
                     {
-                        _context.Streams.AddRange(
-                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "PCM" },
-                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "PCB" },
-                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "Commerce" },
-                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "Arts" }
-                        );
+                        var schoolStreams = masterStreams.Select(ms => new VidyaOSDAL.Models.Stream
+                        {
+                            SchoolId = school.SchoolId,
+                            ClassId = cls.Id,
+                            StreamMasterId = ms.Id, // FK to StreamMaster table
+                            IsActive = true
+                        });
+                        _context.Streams.AddRange(schoolStreams);
                     }
                 }
 
-                // 4. ---------- CREATE ADMIN USER ----------
                 var adminUser = new User
                 {
                     SchoolId = school.SchoolId,
@@ -138,7 +127,7 @@ namespace VidyaOSServices.Services
                     SchoolId = school.SchoolId,
                     SchoolName = school.SchoolName,
                     AdminUsername = adminUser.Username
-                }, "School registered and classroom environment initialized.");
+                }, "School environment initialized with normalized streams.");
             }
             catch (Exception ex)
             {
@@ -147,129 +136,34 @@ namespace VidyaOSServices.Services
             }
         }
 
-        public async Task<AttendanceViewResponse> ViewAttendanceAsync(
-    int schoolId,
-    int classId,
-    int sectionId,
-    DateOnly date,
-    int? streamId // ✅ NEW (OPTIONAL)
-)
+        public async Task<AttendanceViewResponse> ViewAttendanceAsync(int schoolId, int classId, int sectionId, DateOnly date, int? streamId)
         {
-            // 1️⃣ Students of class + section (+ stream only for 11/12)
             var studentsQuery = _context.Students
-                .Where(s =>
-                    s.SchoolId == schoolId &&
-                    s.ClassId == classId &&
-                    s.SectionId == sectionId &&
-                    s.IsActive == true);
+                .Where(s => s.SchoolId == schoolId && s.ClassId == classId && s.SectionId == sectionId && s.IsActive == true);
 
-            // ✅ APPLY STREAM FILTER ONLY FOR 11 & 12
             if ((classId == 11 || classId == 12) && streamId.HasValue)
-            {
                 studentsQuery = studentsQuery.Where(s => s.StreamId == streamId);
-            }
 
-            var students = await studentsQuery
-                .OrderBy(s => s.RollNo)
-                .Select(s => new
-                {
-                    s.UserId,
-                    s.RollNo,
-                    s.AdmissionNo,
-                    FullName = s.FirstName + " " + s.LastName
-                })
+            var students = await studentsQuery.OrderBy(s => s.RollNo)
+                .Select(s => new { s.UserId, s.RollNo, s.AdmissionNo, FullName = s.FirstName + " " + s.LastName })
                 .ToListAsync();
 
-            if (!students.Any())
-            {
-                return new AttendanceViewResponse
-                {
-                    Success = false,
-                    Message = "No students found for selected filters",
-                    AttendanceDate = date
-                };
-            }
+            if (!students.Any()) return new AttendanceViewResponse { Success = false, Message = "No students found", AttendanceDate = date };
 
             var userIds = students.Select(s => s.UserId).ToList();
-
-            // 2️⃣ Approved leaves
-            var leaveUserIds = await _context.Leaves
-                .Where(l =>
-                    l.SchoolId == schoolId &&
-                    l.Status == "Approved" &&
-                    date >= l.FromDate &&
-                    date <= l.ToDate)
-                .Select(l => l.UserId)
-                .ToListAsync();
-
-            // 3️⃣ Attendance records
-            var attendance = await _context.Attendances
-                .Where(a =>
-                    a.SchoolId == schoolId &&
-                    a.AttendanceDate == date &&
-                    userIds.Contains(a.UserId))
-                .ToListAsync();
-
-            bool attendanceTaken = attendance.Any();
+            var leaveUserIds = await _context.Leaves.Where(l => l.SchoolId == schoolId && l.Status == "Approved" && date >= l.FromDate && date <= l.ToDate).Select(l => l.UserId).ToListAsync();
+            var attendance = await _context.Attendances.Where(a => a.SchoolId == schoolId && a.AttendanceDate == date && userIds.Contains(a.UserId)).ToListAsync();
 
             int present = 0, absent = 0, leave = 0, notMarked = 0;
-
-            var result = students.Select(s =>
-            {
-                if (leaveUserIds.Contains(s.UserId))
-                {
-                    leave++;
-                    return new AttendanceViewStudentDto
-                    {
-                        RollNo = (int)s.RollNo,
-                        AdmissionNo = s.AdmissionNo!,
-                        FullName = s.FullName,
-                        Status = "Leave"
-                    };
-                }
-
+            var result = students.Select(s => {
+                if (leaveUserIds.Contains(s.UserId)) { leave++; return new AttendanceViewStudentDto { RollNo = (int)s.RollNo, AdmissionNo = s.AdmissionNo!, FullName = s.FullName, Status = "Leave" }; }
                 var att = attendance.FirstOrDefault(a => a.UserId == s.UserId);
-
-                if (att == null)
-                {
-                    notMarked++;
-                    return new AttendanceViewStudentDto
-                    {
-                        RollNo = (int)s.RollNo,
-                        AdmissionNo = s.AdmissionNo!,
-                        FullName = s.FullName,
-                        Status = "NotMarked"
-                    };
-                }
-
-                if (att.Status == "Present")
-                    present++;
-                else
-                    absent++;
-
-                return new AttendanceViewStudentDto
-                {
-                    RollNo = (int)s.RollNo,
-                    AdmissionNo = s.AdmissionNo!,
-                    FullName = s.FullName,
-                    Status = att.Status!
-                };
+                if (att == null) { notMarked++; return new AttendanceViewStudentDto { RollNo = (int)s.RollNo, AdmissionNo = s.AdmissionNo!, FullName = s.FullName, Status = "NotMarked" }; }
+                if (att.Status == "Present") present++; else absent++;
+                return new AttendanceViewStudentDto { RollNo = (int)s.RollNo, AdmissionNo = s.AdmissionNo!, FullName = s.FullName, Status = att.Status! };
             }).ToList();
 
-            return new AttendanceViewResponse
-            {
-                AttendanceDate = date,
-                AttendanceTaken = attendanceTaken,
-                Summary = new AttendanceSummary
-                {
-                    Total = students.Count,
-                    Present = present,
-                    Absent = absent,
-                    Leave = leave,
-                    NotMarked = notMarked
-                },
-                Students = result
-            };
+            return new AttendanceViewResponse { AttendanceDate = date, AttendanceTaken = attendance.Any(), Summary = new AttendanceSummary { Total = students.Count, Present = present, Absent = absent, Leave = leave, NotMarked = notMarked }, Students = result };
         }
         public async Task<ApiResult<LeaveResponse>> ApplyLeaveAsync(ApplyLeaveRequest req)
         {
@@ -295,7 +189,7 @@ namespace VidyaOSServices.Services
                     l.ToDate >= fromDate
                 );
 
-            LeaveRequest targetLeave;
+            Leaf targetLeave;
 
             if (existingLeave != null)
             {
@@ -311,7 +205,7 @@ namespace VidyaOSServices.Services
             else
             {
                 // ➕ CREATE: New leave entry
-                targetLeave = new LeaveRequest
+                targetLeave = new Leaf
                 {
                     SchoolId = req.SchoolId,
                     UserId = req.UserId, // standardized to UserId
@@ -831,16 +725,15 @@ namespace VidyaOSServices.Services
             );
         }
         public async Task<ApiResult<List<StudentListDto>>> GetStudentsByClassSectionAsync(
-            int schoolId,
-            int classId,
-            int sectionId,
-            int? streamId = null)
+            int schoolId, int classId, int sectionId, int? streamId = null)
         {
             var students = await (
                 from s in _context.Students
-                    // Left Join with Streams
                 join st in _context.Streams on s.StreamId equals st.StreamId into streamJoin
                 from st in streamJoin.DefaultIfEmpty()
+                    // New Join to get Name from StreamMaster
+                join sm in _context.StreamMasters on st.StreamMasterId equals sm.Id into masterJoin
+                from sm in masterJoin.DefaultIfEmpty()
 
                 where s.SchoolId == schoolId &&
                       s.ClassId == classId &&
@@ -855,8 +748,7 @@ namespace VidyaOSServices.Services
                     AdmissionNo = s.AdmissionNo!,
                     FullName = s.FirstName + " " + s.LastName,
                     RollNo = s.RollNo ?? 0,
-                    // Only provide stream name if it exists (for 11 & 12)
-                    StreamName = st != null ? st.StreamName : null
+                    StreamName = sm != null ? sm.StreamName : null
                 }
             ).ToListAsync();
 

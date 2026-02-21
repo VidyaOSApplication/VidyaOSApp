@@ -15,5 +15,9 @@ public partial class Stream
 
     public bool? IsActive { get; set; }
 
+    public int StreamMasterId { get; set; }
+
     public virtual Class Class { get; set; } = null!;
+
+    public virtual StreamMaster StreamMaster { get; set; } = null!;
 }

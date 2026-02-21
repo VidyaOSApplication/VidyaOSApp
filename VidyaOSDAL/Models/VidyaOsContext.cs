@@ -35,7 +35,7 @@ public partial class VidyaOsContext : DbContext
 
     public virtual DbSet<Homework> Homeworks { get; set; }
 
-    public virtual DbSet<LeaveRequest> Leaves { get; set; }
+    public virtual DbSet<Leaf> Leaves { get; set; }
 
     public virtual DbSet<LibraryBook> LibraryBooks { get; set; }
 
@@ -48,6 +48,8 @@ public partial class VidyaOsContext : DbContext
     public virtual DbSet<Section> Sections { get; set; }
 
     public virtual DbSet<Stream> Streams { get; set; }
+
+    public virtual DbSet<StreamMaster> StreamMasters { get; set; }
 
     public virtual DbSet<Student> Students { get; set; }
 
@@ -194,7 +196,7 @@ public partial class VidyaOsContext : DbContext
             entity.Property(e => e.Title).HasMaxLength(100);
         });
 
-        modelBuilder.Entity<LeaveRequest>(entity =>
+        modelBuilder.Entity<Leaf>(entity =>
         {
             entity.HasKey(e => e.LeaveId).HasName("PK__Leaves__796DB959157FE09E");
 
@@ -279,10 +281,24 @@ public partial class VidyaOsContext : DbContext
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.StreamName).HasMaxLength(50);
 
+            entity.HasOne(d => d.StreamMaster).WithMany(p => p.Streams)
+                .HasForeignKey(d => d.StreamMasterId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Streams_StreamMasters");
+
             entity.HasOne(d => d.Class).WithMany(p => p.Streams)
                 .HasForeignKey(d => new { d.SchoolId, d.ClassId })
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Streams_Classes");
+        });
+
+        modelBuilder.Entity<StreamMaster>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__StreamMa__3214EC075B3AFCE6");
+
+            entity.HasIndex(e => e.StreamName, "UQ__StreamMa__B24F748CB832F771").IsUnique();
+
+            entity.Property(e => e.StreamName).HasMaxLength(50);
         });
 
         modelBuilder.Entity<Student>(entity =>
