@@ -1659,6 +1659,15 @@ namespace VidyaOSServices.Services
             return ApiResult<bool>.Ok(true, "Subject assigned to class.");
         }
 
+        public async Task<ApiResult<List<AssignedSubjectResponseDto>>> GetAssignedSubjectsAsync(int schoolId, int classId)
+        {
+            var data = await _context.Subjects
+                .Where(s => s.SchoolId == schoolId && s.ClassId == classId)
+                .Select(s => new AssignedSubjectResponseDto { SubjectId = s.SubjectId, SubjectName = s.SubjectName, ClassId = s.ClassId })
+                .ToListAsync();
+            return ApiResult<List<AssignedSubjectResponseDto>>.Ok(data);
+        }
+
         // 4. Delete Assigned Subject (Class level only)
         public async Task<ApiResult<bool>> DeleteAssignedSubjectAsync(int subjectId, int schoolId)
         {

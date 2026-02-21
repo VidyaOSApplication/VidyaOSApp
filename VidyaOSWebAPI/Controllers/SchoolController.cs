@@ -405,6 +405,9 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GetAssignedSubjects([FromQuery] int schoolId, [FromQuery] int classId) => Ok(await _schoolService.GetAssignedSubjectsAsync(schoolId, classId));
+
         [HttpDelete]
         public async Task<IActionResult> DeleteAssigned(int subjectId, int schoolId)
         {
