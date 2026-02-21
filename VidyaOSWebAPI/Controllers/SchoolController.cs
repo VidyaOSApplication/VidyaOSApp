@@ -371,5 +371,34 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : NotFound(result);
         }
 
+        [HttpPost]
+        public async Task<IActionResult> AddMaster([FromBody] MasterSubjectDto dto)
+        {
+            var result = await _schoolService.AddMasterSubjectAsync(dto);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpPut]
+        public async Task<IActionResult> UpdateMaster([FromBody] MasterSubjectDto dto)
+        {
+            if (dto.MasterSubjectId == null) return BadRequest("MasterSubjectId is required.");
+            var result = await _schoolService.UpdateMasterSubjectAsync(dto);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> AssignToClass([FromBody] AssignSubjectDto dto)
+        {
+            var result = await _schoolService.AssignSubjectToClassAsync(dto);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpDelete]
+        public async Task<IActionResult> DeleteAssigned(int subjectId, int schoolId)
+        {
+            var result = await _schoolService.DeleteAssignedSubjectAsync(subjectId, schoolId);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
     }
 }

@@ -1556,19 +1556,95 @@ namespace VidyaOSServices.Services
             }
         }
 
-        // --- DTOs ---
-        public class AdminDashboardSummaryDto
+        public async Task<ApiResult<bool>> AddMasterSubjectAsync(MasterSubjectDto dto)
         {
-            public int TotalStudents { get; set; }
-            public int TotalTeachers { get; set; }
-            public SubscriptionSummaryDto? Subscription { get; set; }
+            var exists = await _context.MasterSubjects.AnyAsync(m =>
+                m.SchoolId == dto.SchoolId &&
+                m.SubjectName.ToLower() == dto.SubjectName.ToLower());
+
+            if (exists) return ApiResult<bool>.Fail("Subject already exists in Master list.");
+
+            var master = new MasterSubject
+            {
+                SchoolId = dto.SchoolId,
+                SubjectName = dto.SubjectName,
+                StreamId = dto.StreamId,
+                IsActive = dto.IsActive
+            };
+
+            _context.MasterSubjects.Add(master);
+            await _context.SaveChangesAsync();
+            return ApiResult<bool>.Ok(true, "Master subject added.");
+        }
+        public async Task<ApiResult<bool>> UpdateMasterSubjectAsync(MasterSubjectDto dto)
+        {
+            var master = await _context.MasterSubjects.FirstOrDefaultAsync(m =>
+                m.MasterSubjectId == dto.MasterSubjectId && m.SchoolId == dto.SchoolId);
+
+            if (master == null) return ApiResult<bool>.Fail("Master subject not found.");
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // Sync Logic: If name changed, update all existing assignments in Subjects table
+                if (master.SubjectName != dto.SubjectName)
+                {
+                    var assignments = await _context.Subjects
+                        .Where(s => s.SchoolId == dto.SchoolId && s.SubjectName == master.SubjectName)
+                        .ToListAsync();
+
+                    foreach (var assignment in assignments)
+                    {
+                        assignment.SubjectName = dto.SubjectName;
+                    }
+                }
+
+                master.SubjectName = dto.SubjectName;
+                master.StreamId = dto.StreamId;
+                master.IsActive = dto.IsActive;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return ApiResult<bool>.Ok(true, "Master list and assigned subjects synced.");
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return ApiResult<bool>.Fail($"Sync error: {ex.Message}");
+            }
         }
 
-        public class SubscriptionSummaryDto
+        // 3. Assign Subject to Class
+        public async Task<ApiResult<bool>> AssignSubjectToClassAsync(AssignSubjectDto dto)
         {
-            public string PlanName { get; set; }
-            public DateOnly? EndDate { get; set; }
-            public int MaxStudents { get; set; }
+            var exists = await _context.Subjects.AnyAsync(s =>
+                s.SchoolId == dto.SchoolId && s.ClassId == dto.ClassId && s.SubjectName == dto.SubjectName);
+
+            if (exists) return ApiResult<bool>.Fail("Subject already assigned to this class.");
+
+            var subject = new Subject
+            {
+                SchoolId = dto.SchoolId,
+                ClassId = dto.ClassId,
+                StreamId = dto.StreamId,
+                SubjectName = dto.SubjectName,
+                IsActive = true
+            };
+
+            _context.Subjects.Add(subject);
+            await _context.SaveChangesAsync();
+            return ApiResult<bool>.Ok(true, "Subject assigned to class.");
+        }
+
+        // 4. Delete Assigned Subject (Class level only)
+        public async Task<ApiResult<bool>> DeleteAssignedSubjectAsync(int subjectId, int schoolId)
+        {
+            var item = await _context.Subjects.FirstOrDefaultAsync(s => s.SubjectId == subjectId && s.SchoolId == schoolId);
+            if (item == null) return ApiResult<bool>.Fail("Assigned subject not found.");
+
+            _context.Subjects.Remove(item);
+            await _context.SaveChangesAsync();
+            return ApiResult<bool>.Ok(true, "Subject removed from class.");
         }
 
     }

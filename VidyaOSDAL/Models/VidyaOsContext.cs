@@ -70,6 +70,7 @@ public partial class VidyaOsContext : DbContext
     public virtual DbSet<TimeTable> TimeTables { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
+    public virtual DbSet<MasterSubject> MasterSubjects { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     { }
