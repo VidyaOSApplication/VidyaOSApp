@@ -415,17 +415,5 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
-        [HttpGet]
-        public async Task<IActionResult> GetStreams([FromQuery] int schoolId, [FromQuery] int classId)
-        {
-            if (schoolId <= 0 || classId <= 0)
-                return BadRequest(ApiResult<string>.Fail("Invalid parameters."));
-
-            var result = await _schoolService.GetStreamsByClassAsync(schoolId, classId);
-
-            if (!result.Success) return BadRequest(result);
-            return Ok(result);
-        }
-
     }
 }

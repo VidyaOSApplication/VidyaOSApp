@@ -1571,29 +1571,6 @@ namespace VidyaOSServices.Services
             return ApiResult<bool>.Ok(true, "Subject removed from class.");
         }
 
-        public async Task<ApiResult<List<StreamDropdownDto>>> GetStreamsByClassAsync(int schoolId, int classId)
-        {
-            try
-            {
-                var streams = await (from s in _context.Streams
-                                     join sm in _context.StreamMasters on s.StreamMasterId equals sm.Id
-                                     where s.SchoolId == schoolId &&
-                                           s.ClassId == classId &&
-                                           s.IsActive == true
-                                     select new StreamDropdownDto
-                                     {
-                                         StreamId = s.StreamId,
-                                         StreamName = sm.StreamName
-                                     }).ToListAsync();
-
-                return ApiResult<List<StreamDropdownDto>>.Ok(streams, "Streams retrieved successfully.");
-            }
-            catch (Exception ex)
-            {
-                return ApiResult<List<StreamDropdownDto>>.Fail("Error fetching streams: " + ex.Message);
-            }
-        }
-
     }
 }
 
