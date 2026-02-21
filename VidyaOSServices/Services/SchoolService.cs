@@ -1576,6 +1576,29 @@ namespace VidyaOSServices.Services
             await _context.SaveChangesAsync();
             return ApiResult<bool>.Ok(true, "Master subject added.");
         }
+
+        public async Task<ApiResult<List<MasterSubjectResponseDto>>> GetAllMasterSubjectsAsync(int schoolId)
+        {
+            // Use .MasterSubjects (plural) to resolve your CS1061 error
+            var subjects = await _context.MasterSubjects
+                .Where(m => m.SchoolId == schoolId)
+                .OrderBy(m => m.SubjectName)
+                .Select(m => new MasterSubjectResponseDto
+                {
+                    MasterSubjectId = m.MasterSubjectId,
+                    SubjectName = m.SubjectName,
+                    StreamId = m.StreamId,
+                    // Assuming you have a Streams table in your context
+                    StreamName = _context.Streams
+                        .Where(s => s.StreamId == m.StreamId)
+                        .Select(s => s.StreamName)
+                        .FirstOrDefault(),
+                    IsActive = m.IsActive ?? false
+                })
+                .ToListAsync();
+
+            return ApiResult<List<MasterSubjectResponseDto>>.Ok(subjects, "Master subjects retrieved successfully.");
+        }
         public async Task<ApiResult<bool>> UpdateMasterSubjectAsync(MasterSubjectDto dto)
         {
             var master = await _context.MasterSubjects.FirstOrDefaultAsync(m =>

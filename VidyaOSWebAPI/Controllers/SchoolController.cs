@@ -378,6 +378,18 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GetAllMasterSubjects([FromQuery] int schoolId)
+        {
+            if (schoolId <= 0)
+                return BadRequest(ApiResult<string>.Fail("Invalid School ID."));
+
+            var result = await _schoolService.GetAllMasterSubjectsAsync(schoolId);
+
+            if (!result.Success) return BadRequest(result);
+            return Ok(result);
+        }
+
         [HttpPut]
         public async Task<IActionResult> UpdateMaster([FromBody] MasterSubjectDto dto)
         {
