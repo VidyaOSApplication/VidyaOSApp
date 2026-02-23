@@ -50,8 +50,6 @@ namespace VidyaOSServices.Services
                     // Extract the first character of each word, ensuring it's a valid character
                     var initials = string.Concat(words.Select(w => w[0])).ToUpper();
 
-                    // Append random 3-digit number (It's okay if this results in a duplicate as per your requirement)
-                    schoolCode = initials + new Random().Next(100, 999);
                 }
                 else
                 {
@@ -1526,6 +1524,10 @@ namespace VidyaOSServices.Services
                 // 1. Get counts for Students and Teachers
                 int studentCount = await _context.Students.CountAsync(s => s.SchoolId == schoolId && s.IsActive == true);
                 int teacherCount = await _context.Teachers.CountAsync(t => t.SchoolId == schoolId && t.IsActive == true);
+                string schoolName = await _context.Schools
+                    .Where(s => s.SchoolId == schoolId)
+                    .Select(s => s.SchoolName)
+                    .FirstOrDefaultAsync() ?? "VidyaOs School";
 
                 // 2. Get the active subscription and plan details
                 var subData = await _context.Subscriptions
@@ -1537,6 +1539,7 @@ namespace VidyaOSServices.Services
                     .OrderByDescending(x => x.sub.EndDate)
                     .Select(x => new SubscriptionSummaryDto
                     {
+                        
                         PlanName = x.plan.PlanName,
                         EndDate = x.sub.EndDate,
                         MaxStudents = x.plan.MaxStudents ?? 0
@@ -1545,6 +1548,7 @@ namespace VidyaOSServices.Services
 
                 return ApiResult<AdminDashboardSummaryDto>.Ok(new AdminDashboardSummaryDto
                 {
+                    SchoolName = schoolName,
                     TotalStudents = studentCount,
                     TotalTeachers = teacherCount,
                     Subscription = subData

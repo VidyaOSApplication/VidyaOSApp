@@ -69,10 +69,14 @@ namespace VidyaOSHelper
             if (section == null)
                 throw new InvalidOperationException("Section not found.");
 
-            section.RollSeq += 1;
+            // ✅ safe increment (handles NULL)
+            int next = (section.RollSeq ?? 0) + 1;
+
+            section.RollSeq = next;
+
             await _context.SaveChangesAsync();
 
-            return (int)section.RollSeq;
+            return next;
         }
     }
 }

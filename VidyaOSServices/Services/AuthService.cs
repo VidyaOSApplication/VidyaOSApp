@@ -44,7 +44,7 @@ namespace VidyaOSServices.Services
             if (user.Role != "SuperAdmin")
             {
                 // Get the current date in DateOnly format to match database types
-                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var today = DateOnly.FromDateTime(DateTime.Now);
 
                 var activeSub = await _context.Subscriptions
                     .Where(s => s.SchoolId == user.SchoolId && s.IsActive == true)
