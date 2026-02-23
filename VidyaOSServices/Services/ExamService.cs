@@ -20,39 +20,34 @@ namespace VidyaOSServices.Services
 
         public async Task<ApiResult<int>> CreateExamAsync(CreateExamRequest req)
         {
-            using var tx = await _context.Database.BeginTransactionAsync();
-
             try
             {
+                // Validation
+                if (string.IsNullOrWhiteSpace(req.ExamName))
+                    return ApiResult<int>.Fail("Exam name is required.");
+
                 var exam = new Exam
                 {
                     SchoolId = req.SchoolId,
                     ExamName = req.ExamName,
                     AcademicYear = req.AcademicYear,
-                    IsActive = true
+                    // Convert DateTime to DateOnly for the Model
+                    StartDate = req.StartDate.HasValue ? DateOnly.FromDateTime(req.StartDate.Value) : null,
+                    EndDate = req.EndDate.HasValue ? DateOnly.FromDateTime(req.EndDate.Value) : null,
+                    Status = "Upcoming", // Default status
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 _context.Exams.Add(exam);
                 await _context.SaveChangesAsync();
 
-                foreach (var classId in req.ClassIds)
-                {
-                    _context.ExamClasses.Add(new ExamClass
-                    {
-                        ExamId = exam.ExamId,
-                        ClassId = classId
-                    });
-                }
-
-                await _context.SaveChangesAsync();
-                await tx.CommitAsync();
-
                 return ApiResult<int>.Ok(exam.ExamId, "Exam created successfully.");
             }
-            catch
+            catch (Exception ex)
             {
-                await tx.RollbackAsync();
-                throw;
+                // Log the exception details here if needed
+                return ApiResult<int>.Fail($"Failed to create exam: {ex.Message}");
             }
         }
         public async Task<ApiResult<object>> GetScheduleSubjectsAsync(

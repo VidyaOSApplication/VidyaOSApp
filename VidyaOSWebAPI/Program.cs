@@ -8,7 +8,6 @@ using VidyaOSHelper;
 using VidyaOSServices.Services;
 using QuestPDF.Infrastructure;
 
-
 namespace VidyaOSWebAPI
 {
     public class Program
@@ -51,23 +50,27 @@ namespace VidyaOSWebAPI
 
             builder.Services.AddAuthorization();
 
-            // 🔥 FINALIZED CORS POLICY FOR MOBILE & WEB
+            // 🔥 UPDATED CORS POLICY FOR LIVE NETLIFY DEPLOYMENT
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowFrontendApps", policy =>
                 {
                     policy
                         .WithOrigins(
-                            "http://localhost:8100",   // Ionic Browser
-                            "http://localhost:4200",   // Angular Browser
-                            "https://localhost",      // Capacitor Android/iOS (High Priority)
-                            "http://localhost",       // Capacitor Android (Fallback)
-                            "http://localhost:8081",   // Expo Web
-                            "http://localhost:19006"   // Expo older web port
+                            "http://vidyaos.online",       // Live Web (HTTP)
+                            "https://vidyaos.online",      // Live Web (HTTPS)
+                            "http://www.vidyaos.online",   // Live WWW (HTTP)
+                            "https://www.vidyaos.online",  // Live WWW (HTTPS)
+                            "http://localhost:8100",       // Ionic Browser
+                            "http://localhost:4200",       // Angular Browser
+                            "https://localhost",           // Capacitor Android/iOS
+                            "http://localhost",            // Capacitor Android
+                            "http://localhost:8081",       // Expo Web
+                            "http://localhost:19006"       // Expo older web port
                         )
                         .AllowAnyHeader()
                         .AllowAnyMethod()
-                        .AllowCredentials(); // Required if you use Cookies/Sessions
+                        .AllowCredentials();
                 });
             });
 
@@ -114,15 +117,13 @@ namespace VidyaOSWebAPI
             builder.Services.AddScoped<ExamService>();
             builder.Services.AddScoped<SubscriptionService>();
             builder.Services.AddScoped<VidyaOSHelper.SchoolHelper.SchoolHelper>();
-            QuestPDF.Settings.License = LicenseType.Community;
 
+            QuestPDF.Settings.License = LicenseType.Community;
 
             var app = builder.Build();
 
             // -------------------- MIDDLEWARE --------------------
 
-            // Swagger should be available in Prod for your testing if needed, 
-            // otherwise wrap in if (app.Environment.IsDevelopment())
             app.UseSwagger();
             app.UseSwaggerUI();
 

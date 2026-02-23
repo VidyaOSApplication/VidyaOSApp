@@ -276,9 +276,9 @@ namespace VidyaOSWebAPI.Controllers
 
         // API 1: Called by StudentDirectory.tsx
         [HttpGet]
-        public async Task<IActionResult> GetStudentsBySchool(int schoolId)
+        public async Task<IActionResult> GetStudentsByFilters(int schoolId, int classId, int sectionId)
         {
-            var result = await _schoolService.GetStudentsBySchoolAsync(schoolId);
+            var result = await _schoolService.GetStudentsByClassSectionAsync(schoolId, classId, sectionId);
             return Ok(result);
         }
 
@@ -289,6 +289,16 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GetStudentDetailsAsync(id);
             return Ok(result);
         }
+
+        [HttpPut]
+        public async Task<IActionResult> UpdateStudentDetails([FromBody] StudentDetailsDto dto)
+        {
+            if (dto.StudentId <= 0) return BadRequest(ApiResult<bool>.Fail("Invalid ID"));
+
+            var result = await _schoolService.UpdateStudentDetailsAsync(dto);
+            return Ok(result);
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetExams(int schoolId) => Ok(await _schoolService.GetExamsOnlyAsync(schoolId));
 
@@ -413,6 +423,20 @@ namespace VidyaOSWebAPI.Controllers
         {
             var result = await _schoolService.DeleteAssignedSubjectAsync(subjectId, schoolId);
             return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> UpdateTimetableBulk([FromBody] TimetableBulkRequest request)
+        {
+            var result = await _schoolService.UpdateTimetableBulkAsync(request);
+            return Ok(result);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetTimetable(int schoolId, int classId, int sectionId, int? streamId)
+        {
+            var result = await _schoolService.GetTimetableAsync(schoolId, classId, sectionId, streamId);
+            return Ok(result);
         }
 
     }

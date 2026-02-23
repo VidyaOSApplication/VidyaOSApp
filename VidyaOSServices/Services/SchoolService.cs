@@ -1218,10 +1218,13 @@ namespace VidyaOSServices.Services
             return ApiResult<List<SubjectDropdownDto>>.Ok(subjects);
         }
         // Method 1: Get the list for the Directory
-        public async Task<ApiResult<List<StudentSummaryDto>>> GetStudentsBySchoolAsync(int schoolId)
+        public async Task<ApiResult<List<StudentSummaryDto>>> GetStudentsByClassSectionAsync(int schoolId, int classId, int sectionId)
         {
             var data = await _context.Students
-                .Where(s => s.SchoolId == schoolId)
+                .Where(s => s.SchoolId == schoolId &&
+                            s.ClassId == classId &&
+                            s.SectionId == sectionId &&
+                            s.IsActive == true)
                 .Select(s => new StudentSummaryDto
                 {
                     StudentId = s.StudentId,
@@ -1231,6 +1234,7 @@ namespace VidyaOSServices.Services
                         .Where(c => c.SchoolId == s.SchoolId && c.ClassId == s.ClassId)
                         .Select(c => c.ClassName).FirstOrDefault() ?? "N/A"
                 }).ToListAsync();
+
             return ApiResult<List<StudentSummaryDto>>.Ok(data);
         }
 
@@ -1274,6 +1278,27 @@ namespace VidyaOSServices.Services
             if (student == null) return ApiResult<StudentDetailsDto>.Fail("Student not found.");
 
             return ApiResult<StudentDetailsDto>.Ok(student);
+        }
+
+        public async Task<ApiResult<bool>> UpdateStudentDetailsAsync(StudentDetailsDto dto)
+        {
+            var student = await _context.Students
+                .FirstOrDefaultAsync(s => s.StudentId == dto.StudentId);
+
+            if (student == null) return ApiResult<bool>.Fail("Student not found.");
+
+            // Update only the editable fields
+            student.FirstName = dto.FullName.Split(' ')[0]; // Basic split logic
+            student.LastName = dto.FullName.Contains(" ") ? dto.FullName.Split(' ')[1] : "";
+            student.ParentPhone = dto.ParentPhone;
+            student.FatherName = dto.FatherName;
+            student.MotherName = dto.MotherName;
+            student.AddressLine1 = dto.AddressLine1;
+            student.City = dto.City;
+            student.State = dto.State;
+
+            await _context.SaveChangesAsync();
+            return ApiResult<bool>.Ok(true, "Profile updated successfully.");
         }
         public async Task<ApiResult<List<LookUpDto>>> GetExamsOnlyAsync(int schoolId)
         {
@@ -1681,6 +1706,99 @@ namespace VidyaOSServices.Services
             _context.Subjects.Remove(item);
             await _context.SaveChangesAsync();
             return ApiResult<bool>.Ok(true, "Subject removed from class.");
+        }
+
+        public async Task<ApiResult<bool>> UpdateTimetableBulkAsync(TimetableBulkRequest req)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // 1. Clear existing schedule for this specific class and section
+                var existing = _context.ClassTimetables.Where(t =>
+                    t.SchoolId == req.SchoolId &&
+                    t.ClassId == req.ClassId &&
+                    t.SectionId == req.SectionId);
+
+                _context.ClassTimetables.RemoveRange(existing);
+
+                // 2. Map and Add new entries
+                foreach (var item in req.Entries)
+                {
+                    var newEntry = new ClassTimetable
+                    {
+                        SchoolId = req.SchoolId,
+                        ClassId = req.ClassId,
+                        SectionId = req.SectionId,
+                        SubjectId = item.SubjectId,
+                        DayOfWeek = MapDayToInt(item.DayOfWeek), // Helper call
+                        PeriodNo = item.PeriodNo,
+                        StartTime = TimeOnly.Parse(item.StartTime),
+                        EndTime = TimeOnly.Parse(item.EndTime),
+                        EffectiveFrom = DateOnly.FromDateTime(DateTime.Today),
+                        AcademicYear = req.AcademicYear,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.ClassTimetables.Add(newEntry);
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return ApiResult<bool>.Ok(true, "Timetable synchronized successfully.");
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return ApiResult<bool>.Fail($"Error saving timetable: {ex.Message}");
+            }
+        }
+
+        // Helper to match your model's 'int DayOfWeek'
+        private int MapDayToInt(string day) => day switch
+        {
+            "Monday" => 1,
+            "Tuesday" => 2,
+            "Wednesday" => 3,
+            "Thursday" => 4,
+            "Friday" => 5,
+            "Saturday" => 6,
+            "Sunday" => 7,
+            _ => 0
+        };
+
+        public async Task<ApiResult<List<object>>> GetTimetableAsync(int schoolId, int classId, int sectionId, int? streamId)
+        {
+            try
+            {
+                var data = await (from ct in _context.ClassTimetables
+                                  join s in _context.Subjects on ct.SubjectId equals s.SubjectId
+                                  where ct.SchoolId == schoolId
+                                     && ct.ClassId == classId
+                                     && ct.SectionId == sectionId
+                                  // && ct.StreamId == streamId // Add this if you add StreamId to your model
+                                  select new
+                                  {
+                                      // Mapping int back to String for the Frontend Grid
+                                      DayOfWeek = ct.DayOfWeek == 1 ? "Monday" :
+                                                  ct.DayOfWeek == 2 ? "Tuesday" :
+                                                  ct.DayOfWeek == 3 ? "Wednesday" :
+                                                  ct.DayOfWeek == 4 ? "Thursday" :
+                                                  ct.DayOfWeek == 5 ? "Friday" :
+                                                  ct.DayOfWeek == 6 ? "Saturday" : "Sunday",
+                                      ct.PeriodNo,
+                                      ct.SubjectId,
+                                      SubjectName = s.SubjectName, // Coming from the joined Subjects table
+                                      StartTime = ct.StartTime.ToString("HH:mm"),
+                                      EndTime = ct.EndTime.ToString("HH:mm")
+                                  }).ToListAsync();
+
+                return ApiResult<List<object>>.Ok(data.Cast<object>().ToList());
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<List<object>>.Fail($"Failed to fetch timetable: {ex.Message}");
+            }
         }
 
     }
