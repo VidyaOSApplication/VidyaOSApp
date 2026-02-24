@@ -68,6 +68,7 @@ namespace VidyaOSWebAPI
                             "http://localhost:8081",       // Expo Web
                             "http://localhost:19006"       // Expo older web port
                         )
+                        
                         .AllowAnyHeader()
                         .AllowAnyMethod()
                         .AllowCredentials();

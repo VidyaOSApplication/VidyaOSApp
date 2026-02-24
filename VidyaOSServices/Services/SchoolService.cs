@@ -1710,6 +1710,7 @@ namespace VidyaOSServices.Services
 
         public async Task<ApiResult<bool>> UpdateTimetableBulkAsync(TimetableBulkRequest req)
         {
+            // Use a transaction to ensure database integrity
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
@@ -1730,18 +1731,21 @@ namespace VidyaOSServices.Services
                         ClassId = req.ClassId,
                         SectionId = req.SectionId,
                         SubjectId = item.SubjectId,
-                        DayOfWeek = MapDayToInt(item.DayOfWeek), // Helper call
+                        DayOfWeek = MapDayToInt(item.DayOfWeek),
                         PeriodNo = item.PeriodNo,
                         StartTime = TimeOnly.Parse(item.StartTime),
                         EndTime = TimeOnly.Parse(item.EndTime),
                         EffectiveFrom = DateOnly.FromDateTime(DateTime.Today),
-                        AcademicYear = req.AcademicYear,
+                        AcademicYear = req.AcademicYear ?? "2025-26",
+                        // EXPLICIT FIX: Ensure IsActive is set to true before saving 
+                        // to avoid the NULL constraint error seen in Azure logs.
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow
                     };
                     _context.ClassTimetables.Add(newEntry);
                 }
 
+                // 3. Save changes and commit transaction
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
@@ -1750,22 +1754,11 @@ namespace VidyaOSServices.Services
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                return ApiResult<bool>.Fail($"Error saving timetable: {ex.Message}");
+                // Logging the most detailed error possible
+                var message = ex.InnerException?.Message ?? ex.Message;
+                return ApiResult<bool>.Fail($"Error saving timetable: {message}");
             }
         }
-
-        // Helper to match your model's 'int DayOfWeek'
-        private int MapDayToInt(string day) => day switch
-        {
-            "Monday" => 1,
-            "Tuesday" => 2,
-            "Wednesday" => 3,
-            "Thursday" => 4,
-            "Friday" => 5,
-            "Saturday" => 6,
-            "Sunday" => 7,
-            _ => 0
-        };
 
         public async Task<ApiResult<List<object>>> GetTimetableAsync(int schoolId, int classId, int sectionId, int? streamId)
         {
@@ -1776,10 +1769,8 @@ namespace VidyaOSServices.Services
                                   where ct.SchoolId == schoolId
                                      && ct.ClassId == classId
                                      && ct.SectionId == sectionId
-                                  // && ct.StreamId == streamId // Add this if you add StreamId to your model
                                   select new
                                   {
-                                      // Mapping int back to String for the Frontend Grid
                                       DayOfWeek = ct.DayOfWeek == 1 ? "Monday" :
                                                   ct.DayOfWeek == 2 ? "Tuesday" :
                                                   ct.DayOfWeek == 3 ? "Wednesday" :
@@ -1788,7 +1779,7 @@ namespace VidyaOSServices.Services
                                                   ct.DayOfWeek == 6 ? "Saturday" : "Sunday",
                                       ct.PeriodNo,
                                       ct.SubjectId,
-                                      SubjectName = s.SubjectName, // Coming from the joined Subjects table
+                                      SubjectName = s.SubjectName,
                                       StartTime = ct.StartTime.ToString("HH:mm"),
                                       EndTime = ct.EndTime.ToString("HH:mm")
                                   }).ToListAsync();
@@ -1800,6 +1791,18 @@ namespace VidyaOSServices.Services
                 return ApiResult<List<object>>.Fail($"Failed to fetch timetable: {ex.Message}");
             }
         }
+
+        private int MapDayToInt(string day) => day switch
+        {
+            "Monday" => 1,
+            "Tuesday" => 2,
+            "Wednesday" => 3,
+            "Thursday" => 4,
+            "Friday" => 5,
+            "Saturday" => 6,
+            "Sunday" => 7,
+            _ => 1
+        };
 
     }
 }
