@@ -186,81 +186,20 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GetTodaysBirthdaysAsync(schoolId);
             return Ok(result);
         }
-        [HttpPost]
-        public async Task<IActionResult> GenerateRollNos(
-                        GenerateRollNoRequest req)
+        public async Task<IActionResult> GenerateRollNos([FromBody] GenerateRollNoRequest req)
         {
-            var result = await _schoolService
-                .GenerateRollNumbersAlphabeticallyAsync(
-                    req.SchoolId, req.ClassId, req.SectionId);
+            // Pass the StreamId from the request to the service
+            // If req.StreamId is null, the service uses its default parameter
+            var result = await _schoolService.GenerateRollNumbersAlphabeticallyAsync(
+                req.SchoolId,
+                req.ClassId,
+                req.SectionId,
+                req.StreamId);
 
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
-        //public async Task<IActionResult> CreateClassTimeTable(
-        //   [FromBody] CreateTimetableRequest request)
-        //{
-        //    if (request == null)
-        //        return BadRequest("Request body is required.");
-
-        //    var result = await _schoolService.CreateClassTimetableAsync(request);
-        //    return Ok(result);
-        //}
-
-        //[HttpGet]
-        //public async Task<IActionResult> GetClassTimetable(
-        //    int schoolId, int classId, int? sectionId,string academicYear)
-        //{
-        //    var result = await _schoolService
-        //        .GetClassTimetableAsync(schoolId, classId, sectionId, academicYear);
-
-        //    return Ok(result);
-        //}
-        //[HttpPost]
-        //[Authorize(Roles = "SchoolAdmin")]
-        //public async Task<IActionResult> AssignClassSubjects(
-        //AssignClassSubjectsRequest request)
-        //{
-        //    var result = await _schoolService.AssignSubjectsToClassAsync(request);
-        //    return result.Success ? Ok(result) : BadRequest(result);
-        //}
-
-        //[HttpGet]
-        //public async Task<IActionResult> GetSubjectsForAssignment(
-        //        int schoolId,
-        //        int classId,
-        //        int? streamId)
-        //{
-        //    var result = await _schoolService
-        //        .GetSubjectsForClassAsync(schoolId, classId, streamId);
-
-        //    return Ok(result);
-        //}
-        //[HttpPost]
-        //public async Task<IActionResult> AddMasterSubject(
-        //[FromBody] AddMasterSubjectRequest request)
-        //{
-        //    var result = await _schoolService.AddMasterSubjectAsync(request);
-        //    return result.Success ? Ok(result) : BadRequest(result);
-        //}
-
-        //// 📥 Get all master subjects
-        //[HttpGet]
-        //public async Task<IActionResult> GetMasterSubjects(
-        //    [FromQuery] int schoolId)
-        //{
-        //    var result = await _schoolService.GetMasterSubjectsAsync(schoolId);
-        //    return Ok(result);
-        //}
-
-        // 🗑️ Delete master subject
-        //[HttpDelete]
-        //public async Task<IActionResult> DeleteMasterSubject(int id)
-        //{
-        //    var result = await _schoolService.DeleteMasterSubjectAsync(id);
-        //    return result.Success ? Ok(result) : BadRequest(result);
-        //}
+        
         [HttpGet]
         public async Task<IActionResult> GetSubjectsForClassSection(
             int schoolId,

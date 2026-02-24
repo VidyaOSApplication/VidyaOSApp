@@ -889,311 +889,48 @@ namespace VidyaOSServices.Services
         }
 
         public async Task<ApiResult<object>> GenerateRollNumbersAlphabeticallyAsync(
-             int schoolId, int classId, int sectionId)
+        int schoolId, int classId, int sectionId, int? streamId = null)
         {
-            var students = await _context.Students
+            // 1. Build the initial query based on school, class, and section
+            var query = _context.Students
                 .Where(s =>
                     s.SchoolId == schoolId &&
                     s.ClassId == classId &&
                     s.SectionId == sectionId &&
-                    s.IsActive == true)
+                    s.IsActive == true);
+
+            // 2. Add the optional Stream filter if streamId is provided
+            // This is useful for higher classes (11th & 12th)
+            if (streamId.HasValue && streamId.Value > 0)
+            {
+                query = query.Where(s => s.StreamId == streamId.Value);
+            }
+
+            // 3. Order the students alphabetically and execute the query
+            var students = await query
                 .OrderBy(s => s.FirstName)
                 .ThenBy(s => s.LastName)
                 .ToListAsync();
 
             if (!students.Any())
-                return ApiResult<object>.Fail("No students found.");
+                return ApiResult<object>.Fail("No students found for the selected criteria.");
 
+            // 4. Assign sequential roll numbers
             int roll = 1;
             foreach (var student in students)
             {
                 student.RollNo = roll++;
             }
 
+            // 5. Save changes to the Azure SQL Database
             await _context.SaveChangesAsync();
 
             return ApiResult<object>.Ok(null,
-                "Roll numbers generated alphabetically.");
+                streamId.HasValue
+                ? $"Roll numbers generated for stream {streamId.Value}."
+                : "Roll numbers generated alphabetically for the entire section.");
         }
-        //    public async Task<ApiResult<string>> CreateClassTimetableAsync(
-        //CreateTimetableRequest req)
-        //    {
-        //        if (req == null)
-        //            return ApiResult<string>.Fail("Request is required.");
 
-        //        // ⏱ Parse time
-        //        if (!TimeOnly.TryParse(req.StartTime, out var startTime))
-        //            return ApiResult<string>.Fail("Invalid start time.");
-
-        //        if (!TimeOnly.TryParse(req.EndTime, out var endTime))
-        //            return ApiResult<string>.Fail("Invalid end time.");
-
-        //        if (startTime >= endTime)
-        //            return ApiResult<string>.Fail(
-        //                "Start time must be before end time."
-        //            );
-
-        //        // 📅 Effective date validation
-        //        if (req.EffectiveTo.HasValue &&
-        //            req.EffectiveFrom > req.EffectiveTo.Value)
-        //        {
-        //            return ApiResult<string>.Fail(
-        //                "Effective From date cannot be after Effective To date."
-        //            );
-        //        }
-
-        //        // ❌ Period number duplicate check
-        //        bool periodExists = await _context.ClassTimetables.AnyAsync(t =>
-        //            t.SchoolId == req.SchoolId &&
-        //            t.ClassId == req.ClassId &&
-        //            t.SectionId == req.SectionId &&
-        //            t.DayOfWeek == req.DayOfWeek &&
-        //            t.PeriodNo == req.PeriodNo &&
-        //            t.AcademicYear == req.AcademicYear &&
-        //            t.IsActive
-        //        );
-
-        //        if (periodExists)
-        //            return ApiResult<string>.Fail(
-        //                $"Period {req.PeriodNo} already exists for this day."
-        //            );
-
-        //        // ❌ Time overlap check (correct + academic year safe)
-        //        bool overlap = await _context.ClassTimetables.AnyAsync(t =>
-        //            t.SchoolId == req.SchoolId &&
-        //            t.ClassId == req.ClassId &&
-        //            t.SectionId == req.SectionId &&
-        //            t.DayOfWeek == req.DayOfWeek &&
-        //            t.AcademicYear == req.AcademicYear &&
-        //            t.IsActive &&
-        //            startTime < t.EndTime &&
-        //            endTime > t.StartTime
-        //        );
-
-        //        if (overlap)
-        //            return ApiResult<string>.Fail(
-        //                "Timetable period overlaps with an existing period."
-        //            );
-
-        //        // ✅ Insert timetable
-        //        var timetable = new ClassTimetable
-        //        {
-        //            SchoolId = req.SchoolId,
-        //            ClassId = req.ClassId,
-        //            SectionId = req.SectionId,
-        //            SubjectId = req.SubjectId,
-
-        //            DayOfWeek = req.DayOfWeek,
-        //            PeriodNo = req.PeriodNo,
-
-        //            StartTime = startTime,
-        //            EndTime = endTime,
-
-        //            EffectiveFrom = req.EffectiveFrom,
-        //            EffectiveTo = req.EffectiveTo,
-        //            AcademicYear = req.AcademicYear,
-
-        //            IsActive = true,
-        //            CreatedAt = DateTime.UtcNow
-        //        };
-
-        //        _context.ClassTimetables.Add(timetable);
-        //        await _context.SaveChangesAsync();
-
-        //        return ApiResult<string>.Ok(
-        //            "Class timetable created successfully."
-        //        );
-        //    }
-
-
-
-        //    public async Task<ApiResult<List<TimetableResponse>>> GetClassTimetableAsync(
-        //int schoolId,
-        //int classId,
-        //int? sectionId,
-        //string academicYear)
-        //    {
-        //        var timetable = await (
-        //            from t in _context.ClassTimetables
-        //            join s in _context.Subjects
-        //                on new { t.SubjectId, t.ClassId }
-        //                equals new { s.SubjectId, s.ClassId }
-
-        //            where
-        //                t.SchoolId == schoolId &&
-        //                t.ClassId == classId &&
-        //                t.AcademicYear == academicYear &&
-        //                t.IsActive == true &&
-        //                s.IsActive==true &&
-        //                s.SchoolId == schoolId &&
-        //                (
-        //                    sectionId.HasValue
-        //                        ? t.SectionId == sectionId.Value
-        //                        : t.SectionId == null
-        //                )
-
-        //            orderby t.DayOfWeek, t.PeriodNo
-
-        //            select new TimetableResponse
-        //            {
-        //                TimetableId = t.TimetableId,
-        //                DayOfWeek = t.DayOfWeek,
-        //                PeriodNo = t.PeriodNo,
-        //                StartTime = t.StartTime.ToString("hh:mm tt"),
-        //                EndTime = t.EndTime.ToString("hh:mm tt"),
-        //                SubjectName = s.SubjectName
-        //            }
-        //        ).ToListAsync();
-
-        //        return ApiResult<List<TimetableResponse>>.Ok(timetable);
-        //    }
-
-
-
-        //    public async Task<ApiResult<string>> AssignSubjectsToClassAsync(
-        //AssignClassSubjectsRequest req)
-        //    {
-        //        if (req.SubjectIds == null || !req.SubjectIds.Any())
-        //            return ApiResult<string>.Fail("No subjects selected");
-
-        //        // 1️⃣ Fetch master subjects
-        //        var masterSubjects = await _context.MasterSubjects
-        //            .Where(ms =>
-        //                ms.SchoolId == req.SchoolId &&
-        //                req.SubjectIds.Contains(ms.MasterSubjectId))
-        //            .ToListAsync();
-
-        //        if (!masterSubjects.Any())
-        //            return ApiResult<string>.Fail("Master subjects not found");
-
-        //        // 2️⃣ Fetch existing subjects (IMPORTANT: NULL SAFE)
-        //        var existingSubjects = await _context.Subjects
-        //            .Where(s =>
-        //                s.SchoolId == req.SchoolId &&
-        //                s.ClassId == req.ClassId &&
-        //                (
-        //                    (req.StreamId == null && s.StreamId == null) ||
-        //                    (req.StreamId != null && s.StreamId == req.StreamId)
-        //                )
-        //            )
-        //            .ToListAsync();
-
-        //        var existingNames = existingSubjects
-        //            .Select(s => s.SubjectName)
-        //            .ToHashSet();
-
-        //        // 3️⃣ Insert ONLY missing subjects (NO DELETE)
-        //        var subjectsToInsert = masterSubjects
-        //            .Where(ms => !existingNames.Contains(ms.SubjectName))
-        //            .Select(ms => new Subject
-        //            {
-        //                SchoolId = req.SchoolId,
-        //                ClassId = req.ClassId,
-        //                StreamId = req.StreamId,   // null for 1–10
-        //                SubjectName = ms.SubjectName!,
-        //                IsActive = true
-        //            })
-        //            .ToList();
-
-        //        if (subjectsToInsert.Any())
-        //        {
-        //            _context.Subjects.AddRange(subjectsToInsert);
-        //            await _context.SaveChangesAsync();
-        //        }
-
-        //        return ApiResult<string>.Ok("Subjects assigned successfully");
-        //    }
-
-
-        //    public async Task<ApiResult<List<SubjectAssignResponse>>>
-        //     GetSubjectsForClassAsync(int schoolId, int classId, int? streamId)
-        //    {
-        //        var masterSubjects = await _context.MasterSubjects
-        //            .Where(m =>
-        //                m.SchoolId == schoolId &&
-        //                m.IsActive==true &&
-        //                (classId <= 10 || m.StreamId == streamId || m.StreamId == null))
-        //            .ToListAsync();
-
-        //        var assigned = await _context.Subjects
-        //            .Where(s =>
-        //                s.SchoolId == schoolId &&
-        //                s.ClassId == classId &&
-        //                (classId <= 10 || s.StreamId == streamId))
-        //            .ToListAsync();
-
-        //        var result = masterSubjects.Select(m => new SubjectAssignResponse
-        //        {
-        //            SubjectId = m.MasterSubjectId,
-        //            SubjectName = m.SubjectName,
-        //            Assigned = assigned.Any(a => a.SubjectName == m.SubjectName)
-        //        }).ToList();
-
-        //        return ApiResult<List<SubjectAssignResponse>>.Ok(result);
-        //    }
-        //    public async Task<ApiResult<List<MasterSubjectDto>>> GetMasterSubjectsAsync(int schoolId)
-        //    {
-        //        var subjects = await _context.MasterSubjects
-        //            .Where(ms => ms.SchoolId == schoolId && ms.IsActive == true)
-        //            .OrderBy(ms => ms.SubjectName)
-        //            .Select(ms => new MasterSubjectDto
-        //            {
-        //                MasterSubjectId = ms.MasterSubjectId,
-        //                SubjectName = ms.SubjectName
-        //            })
-        //            .ToListAsync();
-
-        //        return ApiResult<List<MasterSubjectDto>>.Ok(subjects);
-        //    }
-        //    public async Task<ApiResult<bool>> DeleteMasterSubjectAsync(int id)
-        //    {
-        //        var subject = await _context.MasterSubjects.FirstOrDefaultAsync(s => s.MasterSubjectId == id);
-
-        //        if (subject == null)
-        //            return ApiResult<bool>.Fail("Subject not found.");
-
-        //        var isAssigned = await _context.Subjects
-        //            .AnyAsync(s => s.SubjectId == id && s.IsActive==true);
-
-        //        if (isAssigned)
-        //        {
-        //            subject.IsActive = false; // 🔑 soft delete
-        //            await _context.SaveChangesAsync();
-
-        //            return ApiResult<bool>.Ok(true, "Subject disabled successfully.");
-        //        }
-
-        //        _context.MasterSubjects.Remove(subject);
-        //        await _context.SaveChangesAsync();
-
-        //        return ApiResult<bool>.Ok(true, "Subject deleted successfully.");
-        //    }
-
-        //public async Task<ApiResult<string>> AddMasterSubjectAsync(AddMasterSubjectRequest req)
-        //{
-        //    if (string.IsNullOrWhiteSpace(req.SubjectName))
-        //        return ApiResult<string>.Fail("Subject name is required");
-
-        //    bool exists = await _context.MasterSubjects.AnyAsync(ms =>
-        //        ms.SchoolId == req.SchoolId &&
-        //        ms.SubjectName == req.SubjectName);
-
-        //    if (exists)
-        //        return ApiResult<string>.Fail("Subject already exists");
-
-        //    var subject = new MasterSubject
-        //    {
-        //        SchoolId = req.SchoolId,
-        //        SubjectName = req.SubjectName.Trim(),
-        //        IsActive = true,
-
-        //    };
-
-        //    _context.MasterSubjects.Add(subject);
-        //    await _context.SaveChangesAsync();
-
-        //    return ApiResult<string>.Ok("Master subject added successfully");
-        //}
         public async Task<ApiResult<List<SubjectDropdownDto>>>
                 GetSubjectsForClassSectionAsync(
                     int schoolId,
