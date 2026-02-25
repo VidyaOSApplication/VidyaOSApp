@@ -20,9 +20,18 @@ namespace VidyaOSWebAPI
 
             builder.Services.AddControllers();
 
+            // ✅ UPDATED — SQL RETRY ADDED (NO FUNCTIONALITY CHANGE)
             builder.Services.AddDbContext<VidyaOsContext>(options =>
                 options.UseSqlServer(
-                    builder.Configuration.GetConnectionString("DefaultConnection")
+                    builder.Configuration.GetConnectionString("DefaultConnection"),
+                    sqlOptions =>
+                    {
+                        sqlOptions.EnableRetryOnFailure(
+                            maxRetryCount: 5,                     // retry attempts
+                            maxRetryDelay: TimeSpan.FromSeconds(10), // delay between retry
+                            errorNumbersToAdd: null
+                        );
+                    }
                 )
             );
 
@@ -57,18 +66,17 @@ namespace VidyaOSWebAPI
                 {
                     policy
                         .WithOrigins(
-                            "http://vidyaos.online",       // Live Web (HTTP)
-                            "https://vidyaos.online",      // Live Web (HTTPS)
-                            "http://www.vidyaos.online",   // Live WWW (HTTP)
-                            "https://www.vidyaos.online",  // Live WWW (HTTPS)
-                            "http://localhost:8100",       // Ionic Browser
-                            "http://localhost:4200",       // Angular Browser
-                            "https://localhost",           // Capacitor Android/iOS
-                            "http://localhost",            // Capacitor Android
-                            "http://localhost:8081",       // Expo Web
-                            "http://localhost:19006"       // Expo older web port
+                            "http://vidyaos.online",
+                            "https://vidyaos.online",
+                            "http://www.vidyaos.online",
+                            "https://www.vidyaos.online",
+                            "http://localhost:8100",
+                            "http://localhost:4200",
+                            "https://localhost",
+                            "http://localhost",
+                            "http://localhost:8081",
+                            "http://localhost:19006"
                         )
-                        
                         .AllowAnyHeader()
                         .AllowAnyMethod()
                         .AllowCredentials();
@@ -103,7 +111,6 @@ namespace VidyaOSWebAPI
                     }
                 });
             });
-
 
             // Dependency Injection
             builder.Services.AddScoped<StudentService>();
