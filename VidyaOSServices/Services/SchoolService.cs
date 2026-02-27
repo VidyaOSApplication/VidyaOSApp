@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using VidyaOSDAL.DTOs;
 using VidyaOSDAL.DTOs.VidyaOS.Models.DTOs;
+using VidyaOSDAL.DTOs.VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
 using VidyaOSHelper.SchoolHelper;
 using static VidyaOSHelper.SchoolHelper.SchoolHelper;
@@ -979,27 +980,40 @@ namespace VidyaOSServices.Services
         public async Task<ApiResult<StudentDetailsDto>> GetStudentDetailsAsync(int studentId)
         {
             var student = await _context.Students
-                .AsNoTracking() // 🚀 Optimization: Faster read-only query
+                .AsNoTracking()
                 .Where(s => s.StudentId == studentId)
                 .Select(s => new StudentDetailsDto
                 {
                     StudentId = s.StudentId,
-                    FullName = s.FirstName + " " + s.LastName,
+                    // Concatenate names for the FullName property
+                    FullName = (s.FirstName + " " + s.LastName).Trim(),
                     AdmissionNo = s.AdmissionNo,
                     RollNo = s.RollNo,
                     AcademicYear = s.AcademicYear,
 
-                    // 🏢 Dynamic School Name Mapping
+                    // 🚀 Logic for Prefilling Selectors
+                    ClassId = s.ClassId,
+                    SectionId = s.SectionId,
+                    StreamId = s.StreamId,
+                    Gender = s.Gender,
+
+                    // 📅 Date Conversion for Frontend Compatibility
+                    Dob = s.Dob.HasValue
+                        ? new DateTime(s.Dob.Value.Year, s.Dob.Value.Month, s.Dob.Value.Day)
+                        : null,
+
+                    // 🏢 Join School Name
                     SchoolName = _context.Schools
                         .Where(sch => sch.SchoolId == s.SchoolId)
                         .Select(sch => sch.SchoolName)
-                        .FirstOrDefault() ?? "School",
+                        .FirstOrDefault() ?? "VidyaOS Academy",
 
-                    // 🔑 Composite Key Joins
+                    // 🔑 Map Class Name based on ID
                     ClassName = _context.Classes
                         .Where(c => c.SchoolId == s.SchoolId && c.ClassId == s.ClassId)
                         .Select(c => c.ClassName).FirstOrDefault() ?? "N/A",
 
+                    // 🔑 Map Section Name based on ID
                     SectionName = _context.Sections
                         .Where(sec => sec.SchoolId == s.SchoolId && sec.ClassId == s.ClassId && sec.SectionId == s.SectionId)
                         .Select(sec => sec.SectionName).FirstOrDefault() ?? "N/A",
@@ -1022,11 +1036,26 @@ namespace VidyaOSServices.Services
             var student = await _context.Students
                 .FirstOrDefaultAsync(s => s.StudentId == dto.StudentId);
 
-            if (student == null) return ApiResult<bool>.Fail("Student not found.");
+            if (student == null) return ApiResult<bool>.Fail("Student record not found.");
 
-            // Update only the editable fields
-            student.FirstName = dto.FullName.Split(' ')[0]; // Basic split logic
-            student.LastName = dto.FullName.Contains(" ") ? dto.FullName.Split(' ')[1] : "";
+            // 1. Name Handling (Handles Middle Names Correctly)
+            var nameParts = dto.FullName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (nameParts.Length > 0)
+            {
+                student.FirstName = nameParts[0];
+                student.LastName = nameParts.Length > 1 ? string.Join(" ", nameParts.Skip(1)) : "";
+            }
+
+            // 2. Academic Placement Update
+            student.ClassId = dto.ClassId;
+            student.SectionId = dto.SectionId;
+            student.StreamId = dto.StreamId;
+
+            // 3. Personal & Contact Info
+            student.Gender = dto.Gender;
+            if (dto.Dob.HasValue)
+                student.Dob = DateOnly.FromDateTime(dto.Dob.Value);
+
             student.ParentPhone = dto.ParentPhone;
             student.FatherName = dto.FatherName;
             student.MotherName = dto.MotherName;
@@ -1034,8 +1063,17 @@ namespace VidyaOSServices.Services
             student.City = dto.City;
             student.State = dto.State;
 
-            await _context.SaveChangesAsync();
-            return ApiResult<bool>.Ok(true, "Profile updated successfully.");
+            try
+            {
+                // Note: Transactions are not manually started here because SaveChangesAsync 
+                // implicitly uses one for single-entity updates.
+                await _context.SaveChangesAsync();
+                return ApiResult<bool>.Ok(true, "Student profile updated successfully.");
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<bool>.Fail($"Save failed: {ex.InnerException?.Message ?? ex.Message}");
+            }
         }
         public async Task<ApiResult<List<LookUpDto>>> GetExamsOnlyAsync(int schoolId)
         {

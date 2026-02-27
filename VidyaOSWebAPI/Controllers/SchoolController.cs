@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.IO;
 using VidyaOSDAL.DTOs;
+using VidyaOSDAL.DTOs.VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
 using VidyaOSServices.Services;
 using static VidyaOSHelper.SchoolHelper.SchoolHelper;

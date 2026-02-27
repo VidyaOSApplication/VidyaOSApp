@@ -20,19 +20,9 @@ namespace VidyaOSWebAPI
 
             builder.Services.AddControllers();
 
-            // ✅ UPDATED — SQL RETRY ADDED (NO FUNCTIONALITY CHANGE)
+            // ✅ FIXED — Removed EnableRetryOnFailure to support manual transactions
             builder.Services.AddDbContext<VidyaOsContext>(options =>
-                options.UseSqlServer(
-                    builder.Configuration.GetConnectionString("DefaultConnection"),
-                    sqlOptions =>
-                    {
-                        sqlOptions.EnableRetryOnFailure(
-                            maxRetryCount: 5,                     // retry attempts
-                            maxRetryDelay: TimeSpan.FromSeconds(10), // delay between retry
-                            errorNumbersToAdd: null
-                        );
-                    }
-                )
+                options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
             );
 
             // JWT Authentication
@@ -59,7 +49,7 @@ namespace VidyaOSWebAPI
 
             builder.Services.AddAuthorization();
 
-            // 🔥 UPDATED CORS POLICY FOR LIVE NETLIFY DEPLOYMENT
+            // 🔥 UPDATED CORS POLICY
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowFrontendApps", policy =>
@@ -136,7 +126,6 @@ namespace VidyaOSWebAPI
             app.UseSwaggerUI();
 
             app.UseHttpsRedirection();
-
             app.UseRouting();
 
             // 🔥 CORS MUST COME BEFORE AUTHENTICATION
