@@ -1,13 +1,12 @@
 ﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.IO;
 using VidyaOSDAL.DTOs;
 using VidyaOSDAL.DTOs.VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
 using VidyaOSServices.Services;
 using static VidyaOSHelper.SchoolHelper.SchoolHelper;
+using QuestPDF.Fluent;
+using VidyaOSHelper;
 
 namespace VidyaOSWebAPI.Controllers
 {
@@ -160,7 +159,36 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GetStudentFeeHistoryAsync(schoolId,studentId);
             return Ok(result);
         }
+
         [HttpGet]
+        public async Task<IActionResult> DownloadReceipt(int feeId)
+        {
+            try
+            {
+                var receiptData = await _schoolService.GetReceiptDataAsync(feeId);
+                if (receiptData == null) return NotFound("Receipt data not found.");
+
+                // 🚀 PDF Generation using the Helper
+                var document = new FeeReceiptDocument(receiptData);
+                byte[] pdfBytes = document.GeneratePdf();
+
+                // 🚀 Filename in IST: firstName_class_section_ddMMyyyy.pdf
+                string dateFormatted = receiptData.GenerationDateTime.ToString("ddMMyyyy");
+                string studentFirstName = (receiptData.StudentName ?? "Student").Split(' ')[0];
+                string className = (receiptData.ClassName ?? "Class").Replace(" ", "");
+                string sectionName = (receiptData.SectionName ?? "Section").Replace(" ", "");
+
+                string fileName = $"{studentFirstName}_{className}_{sectionName}_{dateFormatted}.pdf";
+
+                return File(pdfBytes, "application/pdf", fileName);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal Server Error: {ex.Message}");
+            }
+        }
+
+            [HttpGet]
         public async Task<IActionResult> GetFeeReceipt(
                     int studentId, string feeMonth)
         {
@@ -187,6 +215,7 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GetTodaysBirthdaysAsync(schoolId);
             return Ok(result);
         }
+        [HttpPost]
         public async Task<IActionResult> GenerateRollNos([FromBody] GenerateRollNoRequest req)
         {
             // Pass the StreamId from the request to the service

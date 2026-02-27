@@ -13,12 +13,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.0" />
-    <PackageReference Include="QuestPDF" Version="2026.2.0" />
+    <PackageReference Include="QuestPDF" Version="2026.2.2" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\VidyaOSDAL\VidyaOSDAL.csproj" />
+    <ProjectReference Include="..\VidyaOSHelper\VidyaOSHelper.csproj" />
     <ProjectReference Include="..\VidyaOSServices\VidyaOSServices.csproj" />
   </ItemGroup>
 

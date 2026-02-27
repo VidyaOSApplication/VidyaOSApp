@@ -11,6 +11,7 @@ using VidyaOSDAL.DTOs;
 using VidyaOSDAL.DTOs.VidyaOS.Models.DTOs;
 using VidyaOSDAL.DTOs.VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
+using VidyaOSHelper;
 using VidyaOSHelper.SchoolHelper;
 using static VidyaOSHelper.SchoolHelper.SchoolHelper;
 
@@ -570,70 +571,91 @@ namespace VidyaOSServices.Services
 
             return ApiResult<List<PendingFeeResponse>>.Ok(data);
         }
-        public async Task<ApiResult<CollectFeesResponse>> CollectFeesAsync(CollectFeesRequest req)
+        public async Task<ApiResult<bool>> CollectFeesAsync(CollectFeesRequest req)
         {
-            // 1. Validations
-            if (req.StudentId <= 0 || req.SchoolId <= 0)
-                return ApiResult<CollectFeesResponse>.Fail("Invalid student or school.");
+            if (req.StudentId <= 0 || !req.FeeMonths.Any()) return ApiResult<bool>.Fail("Invalid request.");
 
-            if (req.FeeMonths == null || !req.FeeMonths.Any())
-                return ApiResult<CollectFeesResponse>.Fail("Select at least one fee month.");
+            var fees = await _context.StudentFees
+                .Where(f => f.SchoolId == req.SchoolId && f.StudentId == req.StudentId && req.FeeMonths.Contains(f.FeeMonth!) && f.Status == "Pending")
+                .ToListAsync();
 
-            // 2. Start Transaction
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            if (!fees.Any()) return ApiResult<bool>.Fail("No pending fees found.");
+
+            foreach (var fee in fees)
+            {
+                fee.Status = "Paid";
+                fee.PaymentMode = req.PaymentMode;
+                fee.PaidOn = DateOnly.FromDateTime(DateTime.UtcNow);
+            }
 
             try
             {
-                var fees = await _context.StudentFees
-                    .Where(f =>
-                        f.SchoolId == req.SchoolId &&
-                        f.StudentId == req.StudentId &&
-                        req.FeeMonths.Contains(f.FeeMonth!) &&
-                        f.Status == "Pending")
-                    .ToListAsync();
-
-                if (!fees.Any())
-                    return ApiResult<CollectFeesResponse>.Fail("No pending fees found for the selected months.");
-
-                decimal totalAmount = fees.Sum(f => f.Amount ?? 0);
-
-                // 3. Update records
-                foreach (var fee in fees)
-                {
-                    fee.Status = "Paid";
-                    fee.PaymentMode = req.PaymentMode;
-                    fee.PaidOn = DateOnly.FromDateTime(DateTime.UtcNow);
-                }
-
                 await _context.SaveChangesAsync();
-
-                // 4. Receipt Generation
-                var school = await _context.Schools
-                    .FirstAsync(s => s.SchoolId == req.SchoolId);
-
-                // Professional tip: Using the first FeeId or a dedicated Receipt table is better
-                string receiptNo = $"REC/{school.SchoolCode}/{DateTime.UtcNow:yyyyMMdd}/{fees.First().StudentFeeId}";
-
-                // 5. Commit everything
-                await transaction.CommitAsync();
-
-                return ApiResult<CollectFeesResponse>.Ok(
-                    new CollectFeesResponse
-                    {
-                        ReceiptNo = receiptNo,
-                        StudentId = req.StudentId,
-                        PaidMonths = fees.Select(f => f.FeeMonth!).ToList(),
-                        TotalAmount = totalAmount,
-                        PaidOn = DateTime.UtcNow
-                    },
-                    "Fee collected successfully."
-                );
+                return ApiResult<bool>.Ok(true, "Fees collected successfully.");
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
-                return ApiResult<CollectFeesResponse>.Fail("An error occurred: " + ex.Message);
+                return ApiResult<bool>.Fail("Database error: " + ex.Message);
             }
+        }
+
+        public async Task<byte[]> GenerateFeeReceiptPdfAsync(int feeId)
+        {
+            var data = await GetReceiptDataAsync(feeId); // Your optimized DTO fetcher
+            if (data == null) throw new Exception("Receipt data not found");
+
+            var document = new FeeReceiptDocument(data);
+            return document.GeneratePdf(); // This returns the byte array for the Controller
+        }
+
+        public async Task<FeeReceiptDto?> GetReceiptDataAsync(int studentFeeId)
+        {
+            var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+            var istNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, istZone);
+
+            var rawData = await _context.StudentFees
+                .AsNoTracking()
+                .Where(f => f.StudentFeeId == studentFeeId)
+                .Select(f => new
+                {
+                    f.StudentFeeId,
+                    f.Amount,
+                    f.PaymentMode,
+                    f.PaidOn,
+                    f.FeeMonth, // Format: "2026-4"
+                    f.SchoolId,
+                    f.StudentId
+                })
+                .FirstOrDefaultAsync();
+
+            if (rawData == null) return null;
+
+            // 🚀 ENHANCEMENT: Format "2026-4" to "April 2026"
+            string formattedMonth = rawData.FeeMonth;
+            if (!string.IsNullOrEmpty(rawData.FeeMonth) && rawData.FeeMonth.Contains("-"))
+            {
+                var parts = rawData.FeeMonth.Split('-');
+                if (parts.Length == 2 && int.TryParse(parts[0], out int year) && int.TryParse(parts[1], out int month))
+                {
+                    formattedMonth = new DateTime(year, month, 1).ToString("MMMM yyyy");
+                }
+            }
+
+            return new FeeReceiptDto
+            {
+                StudentFeeId = rawData.StudentFeeId,
+                TotalAmount = rawData.Amount ?? 0,
+                PaymentMode = rawData.PaymentMode ?? "Cash",
+                PaidOn = rawData.PaidOn,
+                FeeMonth = formattedMonth, // 🚀 Now "April 2026"
+                GenerationDateTime = istNow,
+
+                // School & Student Joins (Keep your existing mapping logic here)
+                SchoolName = _context.Schools.Where(s => s.SchoolId == rawData.SchoolId).Select(s => s.SchoolName).FirstOrDefault() ?? "",
+                StudentName = _context.Students.Where(s => s.StudentId == rawData.StudentId).Select(s => s.FirstName + " " + s.LastName).FirstOrDefault() ?? "",
+                ClassName = _context.Classes.Where(c => c.ClassId == _context.Students.Where(st => st.StudentId == rawData.StudentId).Select(st => st.ClassId).FirstOrDefault()).Select(c => c.ClassName).FirstOrDefault() ?? "",
+                SectionName = _context.Sections.Where(sec => sec.SectionId == _context.Students.Where(st => st.StudentId == rawData.StudentId).Select(st => st.SectionId).FirstOrDefault()).Select(sec => sec.SectionName).FirstOrDefault() ?? ""
+            };
         }
 
 
