@@ -416,7 +416,22 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result.Data) : BadRequest(result.Message);
         }
 
+        [HttpGet("{schoolId}")]
+        public async Task<IActionResult> GetProfile(int schoolId)
+        {
+            var result = await _schoolService.GetSchoolProfileAsync(schoolId);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
 
+        // POST: api/School/UpdateProfile
+        [HttpPost]
+        public async Task<IActionResult> UpdateProfile([FromBody] SchoolProfileDto dto)
+        {
+            if (dto == null || dto.SchoolId <= 0) return BadRequest("Invalid Data");
+
+            var result = await _schoolService.UpdateSchoolProfileAsync(dto);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
 
     }
 }

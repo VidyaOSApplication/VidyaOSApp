@@ -1696,6 +1696,57 @@ namespace VidyaOSServices.Services
             }
         }
 
+        public async Task<ApiResult<SchoolProfileDto>> GetSchoolProfileAsync(int schoolId)
+        {
+            var school = await _context.Schools
+                .AsNoTracking()
+                .Where(s => s.SchoolId == schoolId)
+                .Select(s => new SchoolProfileDto
+                {
+                    SchoolId = s.SchoolId,
+                    SchoolName = s.SchoolName,
+                    SchoolCode = s.SchoolCode,
+                    RegistrationNumber = s.RegistrationNumber,
+                    YearOfFoundation = s.YearOfFoundation,
+                    BoardType = s.BoardType,
+                    AffiliationNumber = s.AffiliationNumber,
+                    Email = s.Email,
+                    Phone = s.Phone,
+                    AddressLine1 = s.AddressLine1,
+                    City = s.City,
+                    State = s.State,
+                    Pincode = s.Pincode
+                })
+                .FirstOrDefaultAsync();
+
+            if (school == null) return ApiResult<SchoolProfileDto>.Fail("School not found.");
+
+            return ApiResult<SchoolProfileDto>.Ok(school);
+        }
+
+        public async Task<ApiResult<bool>> UpdateSchoolProfileAsync(SchoolProfileDto dto)
+        {
+            var school = await _context.Schools.FirstOrDefaultAsync(s => s.SchoolId == dto.SchoolId);
+
+            if (school == null) return ApiResult<bool>.Fail("School not found.");
+
+            // Map DTO values back to the Model
+            school.SchoolName = dto.SchoolName;
+            school.RegistrationNumber = dto.RegistrationNumber;
+            school.YearOfFoundation = dto.YearOfFoundation;
+            school.BoardType = dto.BoardType;
+            school.AffiliationNumber = dto.AffiliationNumber;
+            school.Email = dto.Email;
+            school.Phone = dto.Phone;
+            school.AddressLine1 = dto.AddressLine1;
+            school.City = dto.City;
+            school.State = dto.State;
+            school.Pincode = dto.Pincode;
+
+            await _context.SaveChangesAsync();
+            return ApiResult<bool>.Ok(true, "Profile updated successfully.");
+        }
+
     }
 }
 
