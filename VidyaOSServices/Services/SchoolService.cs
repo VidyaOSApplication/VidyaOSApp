@@ -104,14 +104,14 @@ namespace VidyaOSServices.Services
 
                     // C. Create Streams for Class 11 and 12
                     if (cls.Id == 11 || cls.Id == 12)
-                    {
-                        _context.Streams.AddRange(
-                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "PCM" },
-                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "PCB" },
-                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "Commerce" },
-                            new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "Arts" }
-                        );
-                    }
+{
+    _context.Streams.AddRange(
+        new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "PCM", IsActive = true },
+        new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "PCB", IsActive = true },
+        new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "Commerce", IsActive = true },
+        new VidyaOSDAL.Models.Stream { SchoolId = school.SchoolId, ClassId = cls.Id, StreamName = "Arts", IsActive = true }
+    );
+}
                 }
 
                 // 4. ---------- CREATE ADMIN USER ----------
@@ -601,61 +601,70 @@ namespace VidyaOSServices.Services
 
         public async Task<byte[]> GenerateFeeReceiptPdfAsync(int feeId)
         {
-            var data = await GetReceiptDataAsync(feeId); // Your optimized DTO fetcher
+            // 🚀 Fetch the fully populated DTO
+            var data = await GetReceiptDataAsync(feeId);
             if (data == null) throw new Exception("Receipt data not found");
 
+            // 🚀 Generate PDF using the DTO
             var document = new FeeReceiptDocument(data);
-            return document.GeneratePdf(); // This returns the byte array for the Controller
+            return document.GeneratePdf();
         }
 
         public async Task<FeeReceiptDto?> GetReceiptDataAsync(int studentFeeId)
         {
+            // 🚀 Calculate IST Time for display
             var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
             var istNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, istZone);
 
-            var rawData = await _context.StudentFees
-                .AsNoTracking()
-                .Where(f => f.StudentFeeId == studentFeeId)
-                .Select(f => new
-                {
-                    f.StudentFeeId,
-                    f.Amount,
-                    f.PaymentMode,
-                    f.PaidOn,
-                    f.FeeMonth, // Format: "2026-4"
-                    f.SchoolId,
-                    f.StudentId
-                })
-                .FirstOrDefaultAsync();
+            // 🚀 High-performance JOIN fetching data from 5 tables in one query
+            var data = await (from f in _context.StudentFees
+                              join s in _context.Students on f.StudentId equals s.StudentId
+                              join sch in _context.Schools on f.SchoolId equals sch.SchoolId
+                              join cls in _context.Classes on s.ClassId equals cls.ClassId
+                              join sec in _context.Sections on s.SectionId equals sec.SectionId
+                              where f.StudentFeeId == studentFeeId && f.Status == "Paid"
+                              select new FeeReceiptDto
+                              {
+                                  StudentFeeId = f.StudentFeeId,
+                                  TotalAmount = f.Amount ?? 0,
+                                  PaymentMode = f.PaymentMode ?? "Cash",
+                                  PaidOn = f.PaidOn,
+                                  GenerationDateTime = istNow,
 
-            if (rawData == null) return null;
+                                  // 🚀 Fixed: Pulling academic session and admission info from Students table
+                                  AcademicYear = s.AcademicYear ?? "2025-26",
+                                  AdmissionNo = s.AdmissionNo ?? "N/A",
+                                  RollNo = s.RollNo,
+                                  StudentName = $"{s.FirstName} {s.LastName}",
 
-            // 🚀 ENHANCEMENT: Format "2026-4" to "April 2026"
-            string formattedMonth = rawData.FeeMonth;
-            if (!string.IsNullOrEmpty(rawData.FeeMonth) && rawData.FeeMonth.Contains("-"))
+                                  SchoolName = sch.SchoolName,
+                                  SchoolAddress = $"{sch.AddressLine1}, {sch.City}",
+                                  SchoolCode = sch.SchoolCode,
+                                  SchoolEmail = sch.Email,
+                                  SchoolPhone = sch.Phone,
+                                  AffiliationNo = sch.AffiliationNumber,
+
+                                  ClassName = cls.ClassName,
+                                  SectionName = sec.SectionName,
+                                  FeeMonth = f.FeeMonth // Raw format: "2026-6"
+                              }).FirstOrDefaultAsync();
+
+            if (data == null) return null;
+
+            // 🚀 ENHANCEMENT: Format "2026-6" to "June 2026"
+            if (!string.IsNullOrEmpty(data.FeeMonth) && data.FeeMonth.Contains("-"))
             {
-                var parts = rawData.FeeMonth.Split('-');
+                var parts = data.FeeMonth.Split('-');
                 if (parts.Length == 2 && int.TryParse(parts[0], out int year) && int.TryParse(parts[1], out int month))
                 {
-                    formattedMonth = new DateTime(year, month, 1).ToString("MMMM yyyy");
+                    data.FeeMonth = new DateTime(year, month, 1).ToString("MMMM yyyy");
                 }
             }
 
-            return new FeeReceiptDto
-            {
-                StudentFeeId = rawData.StudentFeeId,
-                TotalAmount = rawData.Amount ?? 0,
-                PaymentMode = rawData.PaymentMode ?? "Cash",
-                PaidOn = rawData.PaidOn,
-                FeeMonth = formattedMonth, // 🚀 Now "April 2026"
-                GenerationDateTime = istNow,
+            // 🚀 Generate a professional Receipt Number
+            data.ReceiptNo = $"{data.SchoolCode?.ToUpper()}/{data.GenerationDateTime:yyyy}/{data.StudentFeeId:D4}";
 
-                // School & Student Joins (Keep your existing mapping logic here)
-                SchoolName = _context.Schools.Where(s => s.SchoolId == rawData.SchoolId).Select(s => s.SchoolName).FirstOrDefault() ?? "",
-                StudentName = _context.Students.Where(s => s.StudentId == rawData.StudentId).Select(s => s.FirstName + " " + s.LastName).FirstOrDefault() ?? "",
-                ClassName = _context.Classes.Where(c => c.ClassId == _context.Students.Where(st => st.StudentId == rawData.StudentId).Select(st => st.ClassId).FirstOrDefault()).Select(c => c.ClassName).FirstOrDefault() ?? "",
-                SectionName = _context.Sections.Where(sec => sec.SectionId == _context.Students.Where(st => st.StudentId == rawData.StudentId).Select(st => st.SectionId).FirstOrDefault()).Select(sec => sec.SectionName).FirstOrDefault() ?? ""
-            };
+            return data;
         }
 
 
@@ -799,58 +808,55 @@ namespace VidyaOSServices.Services
         }
 
 
-        public async Task<ApiResult<FeeReceiptResponse>> GenerateFeeReceiptAsync(
-    int studentId, string feeMonth)
-        {
-            var fee = await _context.StudentFees
-                .FirstOrDefaultAsync(f =>
-                    f.StudentId == studentId &&
-                    f.FeeMonth == feeMonth &&
-                    f.Status == "Paid");
+        public async Task<ApiResult<FeeReceiptResponse>> GenerateFeeReceiptAsync(int studentId, string feeMonth)
+{
+    // 🚀 Join Students to get AcademicYear
+    var feeData = await (from f in _context.StudentFees
+                         join s in _context.Students on f.StudentId equals s.StudentId
+                         join sch in _context.Schools on f.SchoolId equals sch.SchoolId
+                         join cls in _context.Classes on s.ClassId equals cls.ClassId
+                         join sec in _context.Sections on s.SectionId equals sec.SectionId
+                         where f.StudentId == studentId && f.FeeMonth == feeMonth && f.Status == "Paid"
+                         select new {
+                             Fee = f,
+                             Student = s,
+                             School = sch,
+                             ClassName = cls.ClassName,
+                             SectionName = sec.SectionName
+                         }).FirstOrDefaultAsync();
 
-            if (fee == null)
-                return ApiResult<FeeReceiptResponse>
-                    .Fail("Paid fee record not found.");
+    if (feeData == null)
+        return ApiResult<FeeReceiptResponse>.Fail("Paid fee record not found.");
 
-            var student = await _context.Students
-                .FirstAsync(s => s.StudentId == studentId);
+    // 🚀 Format FeeMonth (e.g., "2026-6" -> "June 2026")
+    string formattedMonth = "N/A";
+    if (DateTime.TryParseExact(feeMonth, "yyyy-M", null, System.Globalization.DateTimeStyles.None, out DateTime parsedDate))
+    {
+        formattedMonth = parsedDate.ToString("MMMM yyyy");
+    }
 
-            var school = await _context.Schools
-                .FirstAsync(s => s.SchoolId == student.SchoolId);
+    string receiptNo = $"{feeData.School.SchoolCode?.ToUpper() ?? "VOS"}/{feeMonth.Replace("-", "/")}/{feeData.Fee.StudentFeeId:D4}";
 
-            var className = await _context.Classes
-                .Where(c => c.ClassId == student.ClassId)
-                .Select(c => c.ClassName)
-                .FirstAsync();
-
-            var sectionName = await _context.Sections
-                .Where(s => s.SectionId == student.SectionId)
-                .Select(s => s.SectionName)
-                .FirstAsync();
-
-            string receiptNo =
-                $"{school.SchoolCode}/{feeMonth.Replace("-", "/")}/{fee.StudentFeeId}";
-
-            return ApiResult<FeeReceiptResponse>.Ok(
-                new FeeReceiptResponse
-                {
-                    ReceiptNo = receiptNo,
-                    ReceiptDate = fee.PaidOn?.ToDateTime(TimeOnly.MinValue)
-                                  ?? DateTime.UtcNow,
-
-                    SchoolName = school.SchoolName!,
-                    SchoolAddress = $"{school.AddressLine1}, {school.City}",
-
-                    StudentName = $"{student.FirstName} {student.LastName}",
-                    AdmissionNo = student.AdmissionNo!,
-                    ClassSection = $"{className}-{sectionName}",
-
-                    FeeMonth = feeMonth,
-                    Amount = fee.Amount ?? 0,
-                    PaymentMode = fee.PaymentMode ?? "Cash"
-                }
-            );
-        }
+    return ApiResult<FeeReceiptResponse>.Ok(new FeeReceiptResponse
+    {
+        ReceiptNo = receiptNo,
+        // 🚀 Pulled from Students table via join
+        AcademicSession = feeData.Student.AcademicYear ?? "2025-26", 
+        
+        ReceiptDate = feeData.Fee.PaidOn?.ToDateTime(TimeOnly.MinValue) ?? DateTime.UtcNow,
+        SchoolName = feeData.School.SchoolName ?? "VidyaOS School",
+        SchoolAddress = $"{feeData.School.AddressLine1}, {feeData.School.City}",
+        StudentName = $"{feeData.Student.FirstName} {feeData.Student.LastName}",
+        AdmissionNo = !string.IsNullOrEmpty(feeData.Student.AdmissionNo) ? feeData.Student.AdmissionNo : "N/A",
+        ClassSection = $"{feeData.ClassName} - {feeData.SectionName}",
+        
+        // 🚀 Human readable month
+        FeeMonth = formattedMonth, 
+        Amount = feeData.Fee.Amount ?? 0,
+        PaymentMode = feeData.Fee.PaymentMode ?? "Cash",
+        RollNo = feeData.Student.RollNo?.ToString() ?? "N/A"
+    });
+}
         public async Task<ApiResult<List<StudentListDto>>> GetStudentsByClassSectionAsync(
             int schoolId,
             int classId,
@@ -1600,6 +1606,32 @@ namespace VidyaOSServices.Services
             "Sunday" => 7,
             _ => 1
         };
+
+        public async Task<ApiResult<List<StreamDto>>> GetStreamsByClassAsync(int schoolId, int classId)
+        {
+            try
+            {
+                // 🚀 Only Classes 11 and 12 should have streams in VidyaOS
+                if (classId != 11 && classId != 12)
+                    return ApiResult<List<StreamDto>>.Ok(new List<StreamDto>(), "No streams required for this class.");
+
+                var streams = await _context.Streams
+                    .AsNoTracking()
+                    .Where(s => s.SchoolId == schoolId && s.ClassId == classId && s.IsActive == true)
+                    .Select(s => new StreamDto
+                    {
+                        StreamId = s.StreamId,
+                        StreamName = s.StreamName
+                    })
+                    .ToListAsync();
+
+                return ApiResult<List<StreamDto>>.Ok(streams);
+            }
+            catch (Exception ex)
+            {
+                return ApiResult<List<StreamDto>>.Fail($"Failed to fetch streams: {ex.Message}");
+            }
+        }
 
     }
 }

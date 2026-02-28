@@ -36,42 +36,45 @@ namespace VidyaOSServices.Services
                 return students;
             }
         }
-        public async Task<ApiResult<StudentRegisterResponse>> RegisterStudentAsync(
-    StudentRegisterRequest req)
+        public async Task<ApiResult<StudentRegisterResponse>> RegisterStudentAsync(StudentRegisterRequest req)
         {
-            // ---------- Validation ----------
-            if ((req.ClassId == 11 || req.ClassId == 12) && req.StreamId == null)
-            {
-                return ApiResult<StudentRegisterResponse>.Fail("Stream is required for class 11 and 12");
-            }
+            // 1. ---------- Basic Null & Identity Validation ----------
             if (req == null)
                 return ApiResult<StudentRegisterResponse>.Fail("Request cannot be null.");
 
             if (req.SchoolId <= 0)
                 return ApiResult<StudentRegisterResponse>.Fail("Invalid school.");
 
+            // 2. ---------- Stream Validation (Class 11 & 12) ----------
+            if ((req.ClassId == 11 || req.ClassId == 12) && req.StreamId == null)
+            {
+                return ApiResult<StudentRegisterResponse>.Fail("Stream is required for class 11 and 12.");
+            }
+
+            // 3. ---------- Required Fields Validation ----------
             if (string.IsNullOrWhiteSpace(req.FirstName))
                 return ApiResult<StudentRegisterResponse>.Fail("First name is required.");
+
+            if (string.IsNullOrWhiteSpace(req.Category))
+                return ApiResult<StudentRegisterResponse>.Fail("Student category is required.");
 
             if (req.DOB == default)
                 return ApiResult<StudentRegisterResponse>.Fail("Date of birth is required.");
 
-            // ---------- DOB & AGE VALIDATION ----------
+            // 4. ---------- DOB & Age Validation ----------
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var dob = DateOnly.FromDateTime(req.DOB);
 
             if (dob > today)
-                return ApiResult<StudentRegisterResponse>
-                    .Fail("Date of birth cannot be in the future.");
+                return ApiResult<StudentRegisterResponse>.Fail("Date of birth cannot be in the future.");
 
             int age = today.Year - dob.Year;
-            if (dob > today.AddYears(-age))
-                age--;
+            if (dob > today.AddYears(-age)) age--;
 
             if (age < 3)
-                return ApiResult<StudentRegisterResponse>
-                    .Fail("Student should not be less than 3 years old.");
+                return ApiResult<StudentRegisterResponse>.Fail("Student should not be less than 3 years old.");
 
+            // 5. ---------- Infrastructure & Contact Validation ----------
             if (req.ClassId <= 0 || req.SectionId <= 0)
                 return ApiResult<StudentRegisterResponse>.Fail("Class and section are required.");
 
@@ -81,19 +84,17 @@ namespace VidyaOSServices.Services
             if (string.IsNullOrWhiteSpace(req.ParentPhone))
                 return ApiResult<StudentRegisterResponse>.Fail("Parent phone is required.");
 
-            if (!System.Text.RegularExpressions.Regex.IsMatch(
-                req.ParentPhone.Trim(), @"^[6-9]\d{9}$"))
+            if (!System.Text.RegularExpressions.Regex.IsMatch(req.ParentPhone.Trim(), @"^[6-9]\d{9}$"))
             {
-                return ApiResult<StudentRegisterResponse>
-                    .Fail("Invalid parent phone number.");
+                return ApiResult<StudentRegisterResponse>.Fail("Invalid parent phone number.");
             }
 
-            // ---------- Duplicate Check ----------
-            bool exists = await _context.Students.AnyAsync(s =>
+            // 6. ---------- Duplicate Check ----------
+            bool exists = await _context.Students.AsNoTracking().AnyAsync(s =>
                 s.SchoolId == req.SchoolId &&
                 s.AcademicYear == req.AcademicYear &&
                 s.FirstName!.ToLower() == req.FirstName.ToLower() &&
-                s.Dob == DateOnly.FromDateTime(req.DOB) &&
+                s.Dob == dob &&
                 s.ParentPhone == req.ParentPhone
             );
 
@@ -108,34 +109,22 @@ namespace VidyaOSServices.Services
 
             try
             {
-                // ---------- School ----------
-                var school = await _context.Schools
-                    .FirstOrDefaultAsync(s => s.SchoolId == req.SchoolId);
-
+                // 7. ---------- School Context ----------
+                var school = await _context.Schools.FirstOrDefaultAsync(s => s.SchoolId == req.SchoolId);
                 if (school == null)
                     return ApiResult<StudentRegisterResponse>.Fail("School not found.");
 
-                // ---------- Admission No ----------
+                // 8. ---------- Helper Generations (Admission, Roll, Username) ----------
                 int admissionYear = req.AdmissionDate.Year;
-
-                string admissionNo = await _studentHelper.GenerateAdmissionNoAsync(
-                    req.SchoolId,
-                    admissionYear,
-                    school.SchoolCode!
-                );
-
-                // ---------- Roll No ----------
+                string admissionNo = await _studentHelper.GenerateAdmissionNoAsync(req.SchoolId, admissionYear, school.SchoolCode!);
                 int rollNo = await _studentHelper.GenerateRollNoAsync(req.SectionId);
+                string username = await _studentHelper.GenerateStudentUsernameAsync(req.FirstName, req.LastName);
 
-                // ---------- USERNAME (AUTO FROM NAME) ----------
-                string username = await _studentHelper.GenerateStudentUsernameAsync(
-                    req.FirstName, req.LastName);
-
-                // ---------- PASSWORD (FirstName + BirthYear) ----------
+                // 9. ---------- Identity Security ----------
                 string tempPassword = $"{req.FirstName}{req.DOB.Year}";
                 string passwordHash = BCrypt.Net.BCrypt.HashPassword(tempPassword);
 
-                // ---------- User ----------
+                // 10. ---------- Create User Entity ----------
                 var user = new User
                 {
                     SchoolId = req.SchoolId,
@@ -144,7 +133,7 @@ namespace VidyaOSServices.Services
                     Role = "Student",
                     Email = req.Email,
                     Phone = req.ParentPhone,
-                    IsFirstLogin = true,     // 🔥 force change
+                    IsFirstLogin = true,
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -152,28 +141,29 @@ namespace VidyaOSServices.Services
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
 
-                // ---------- Student ----------
+                // 11. ---------- Create Student Entity ----------
                 var student = new Student
                 {
                     SchoolId = req.SchoolId,
-                    UserId = user.UserId,           // 🔥 RELATION
+                    UserId = user.UserId,
                     AdmissionNo = admissionNo,
                     RollNo = rollNo,
-                    FirstName = req.FirstName,
-                    LastName = req.LastName,
+                    FirstName = req.FirstName.Trim(),
+                    LastName = req.LastName?.Trim(),
                     Gender = req.Gender,
-                    Dob = DateOnly.FromDateTime(req.DOB),
+                    Category = req.Category, // 🚀 NEW FIELD MAPPED HERE
+                    Dob = dob,
                     ClassId = req.ClassId,
                     SectionId = req.SectionId,
-                    StreamId = req.StreamId,
+                    StreamId = (req.ClassId == 11 || req.ClassId == 12) ? req.StreamId : null,
                     AcademicYear = req.AcademicYear,
-                    AdmissionDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                    FatherName = req.FatherName,
-                    MotherName = req.MotherName,
-                    ParentPhone = req.ParentPhone,
-                    AddressLine1 = req.AddressLine1,
-                    City = req.City,
-                    State = req.State,
+                    AdmissionDate = DateOnly.FromDateTime(req.AdmissionDate),
+                    FatherName = req.FatherName?.Trim(),
+                    MotherName = req.MotherName?.Trim(),
+                    ParentPhone = req.ParentPhone.Trim(),
+                    AddressLine1 = req.AddressLine1?.Trim(),
+                    City = req.City?.Trim(),
+                    State = req.State?.Trim(),
                     StudentStatus = "Active",
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
@@ -195,12 +185,12 @@ namespace VidyaOSServices.Services
                     "Student registered successfully."
                 );
             }
-            catch
+            catch (Exception ex)
             {
                 await tx.RollbackAsync();
-                throw;
+                // Log the exception here if you have a logger
+                return ApiResult<StudentRegisterResponse>.Fail($"Registration failed: {ex.Message}");
             }
-
         }
         public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int examId, int classId, int subjectId, int? sectionId)
         {

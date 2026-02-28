@@ -27,7 +27,7 @@ namespace VidyaOSDAL.DTOs
         // Student Info
         public string StudentName { get; set; } = null!;
         public string AdmissionNo { get; set; } = null!;
-        public string? RollNo { get; set; }
+        public int? RollNo { get; set; }
         public string ClassName { get; set; } = null!;
         public string SectionName { get; set; } = null!;
         public string? AcademicYear { get; set; }

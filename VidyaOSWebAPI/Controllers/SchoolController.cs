@@ -160,23 +160,22 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
-        [HttpGet]
+        [HttpGet("{feeId}")]
         public async Task<IActionResult> DownloadReceipt(int feeId)
         {
             try
             {
+                // 🚀 Fetch data and generate PDF via Service
                 var receiptData = await _schoolService.GetReceiptDataAsync(feeId);
                 if (receiptData == null) return NotFound("Receipt data not found.");
 
-                // 🚀 PDF Generation using the Helper
-                var document = new FeeReceiptDocument(receiptData);
-                byte[] pdfBytes = document.GeneratePdf();
+                var pdfBytes = await _schoolService.GenerateFeeReceiptPdfAsync(feeId);
 
-                // 🚀 Filename in IST: firstName_class_section_ddMMyyyy.pdf
+                // 🚀 Filename in IST: FirstName_Class_Section_ddMMyyyy.pdf
                 string dateFormatted = receiptData.GenerationDateTime.ToString("ddMMyyyy");
                 string studentFirstName = (receiptData.StudentName ?? "Student").Split(' ')[0];
-                string className = (receiptData.ClassName ?? "Class").Replace(" ", "");
-                string sectionName = (receiptData.SectionName ?? "Section").Replace(" ", "");
+                string className = receiptData.ClassName?.Replace(" ", "") ?? "Class";
+                string sectionName = receiptData.SectionName?.Replace(" ", "") ?? "Sec";
 
                 string fileName = $"{studentFirstName}_{className}_{sectionName}_{dateFormatted}.pdf";
 
@@ -188,7 +187,7 @@ namespace VidyaOSWebAPI.Controllers
             }
         }
 
-            [HttpGet]
+        [HttpGet]
         public async Task<IActionResult> GetFeeReceipt(
                     int studentId, string feeMonth)
         {
@@ -407,6 +406,15 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GetTimetableAsync(schoolId, classId, sectionId, streamId);
             return Ok(result);
         }
+
+        [HttpGet("{schoolId}/{classId}")]
+        public async Task<IActionResult> GetStreams(int schoolId, int classId)
+        {
+            var result = await _schoolService.GetStreamsByClassAsync(schoolId, classId);
+            return result.Success ? Ok(result.Data) : BadRequest(result.Message);
+        }
+
+
 
     }
 }
