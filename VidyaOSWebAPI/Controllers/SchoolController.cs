@@ -244,9 +244,10 @@ namespace VidyaOSWebAPI.Controllers
 
         // API 1: Called by StudentDirectory.tsx
         [HttpGet]
-        public async Task<IActionResult> GetStudentsByFilters(int schoolId, int classId, int sectionId)
+        public async Task<IActionResult> GetStudentsByFilters(int schoolId, int classId, int sectionId, int? streamId)
         {
-            var result = await _schoolService.GetStudentsByClassSectionAsync(schoolId, classId, sectionId);
+            // The nullable int? streamId correctly handles both junior and senior classes
+            var result = await _schoolService.GetStudentsByClassSectionAsync(schoolId, classId, sectionId, streamId);
             return Ok(result);
         }
 
@@ -384,7 +385,8 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAssignedSubjects([FromQuery] int schoolId, [FromQuery] int classId) => Ok(await _schoolService.GetAssignedSubjectsAsync(schoolId, classId));
+        public async Task<IActionResult> GetAssignedSubjects([FromQuery] int schoolId, [FromQuery] int classId, [FromQuery] int? streamId)
+    => Ok(await _schoolService.GetAssignedSubjectsAsync(schoolId, classId, streamId));
 
         [HttpDelete]
         public async Task<IActionResult> DeleteAssigned(int subjectId, int schoolId)

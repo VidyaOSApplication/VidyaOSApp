@@ -858,34 +858,32 @@ namespace VidyaOSServices.Services
     });
 }
         public async Task<ApiResult<List<StudentListDto>>> GetStudentsByClassSectionAsync(
-            int schoolId,
-            int classId,
-            int sectionId,
-            int? streamId = null)
+    int schoolId, int classId, int sectionId, int? streamId = null)
         {
-            var students = await (
-                from s in _context.Students
-                    // Left Join with Streams
-                join st in _context.Streams on s.StreamId equals st.StreamId into streamJoin
-                from st in streamJoin.DefaultIfEmpty()
+            var query = from s in _context.Students
+                            // Use Left Join for Streams to ensure junior classes (null streams) still show up
+                        join st in _context.Streams on s.StreamId equals st.StreamId into streamJoin
+                        from st in streamJoin.DefaultIfEmpty()
+                        where s.SchoolId == schoolId &&
+                              s.ClassId == classId &&
+                              s.SectionId == sectionId &&
+                              s.IsActive == true
+                        select new StudentListDto
+                        {
+                            StudentId = s.StudentId,
+                            AdmissionNo = s.AdmissionNo ?? "N/A",
+                            FullName = s.FirstName + " " + s.LastName,
+                            RollNo = s.RollNo ?? 0,
+                            StreamName = st != null ? st.StreamName : null
+                        };
 
-                where s.SchoolId == schoolId &&
-                      s.ClassId == classId &&
-                      s.SectionId == sectionId &&
-                      s.IsActive == true &&
-                      (!streamId.HasValue || s.StreamId == streamId)
+            if (streamId.HasValue && streamId.Value > 0)
+            {
+                query = query.Where(x => _context.Students.Any(s => s.StudentId == x.StudentId && s.StreamId == streamId));
+            }
 
-                orderby s.RollNo
-                select new StudentListDto
-                {
-                    StudentId = s.StudentId,
-                    AdmissionNo = s.AdmissionNo!,
-                    FullName = s.FirstName + " " + s.LastName,
-                    RollNo = s.RollNo ?? 0,
-                    // Only provide stream name if it exists (for 11 & 12)
-                    StreamName = st != null ? st.StreamName : null
-                }
-            ).ToListAsync();
+            // 🚀 .Distinct() ensures that if a student is mapped twice in a join, they only show once
+            var students = await query.Distinct().OrderBy(s => s.RollNo).ToListAsync();
 
             return ApiResult<List<StudentListDto>>.Ok(students);
         }
@@ -984,12 +982,13 @@ namespace VidyaOSServices.Services
             return ApiResult<List<SubjectDropdownDto>>.Ok(subjects);
         }
         // Method 1: Get the list for the Directory
-        public async Task<ApiResult<List<StudentSummaryDto>>> GetStudentsByClassSectionAsync(int schoolId, int classId, int sectionId)
+        public async Task<ApiResult<List<StudentSummaryDto>>> GetStudentsByClassSectionAsync(int schoolId, int classId, int sectionId,int streamId)
         {
             var data = await _context.Students
                 .Where(s => s.SchoolId == schoolId &&
                             s.ClassId == classId &&
                             s.SectionId == sectionId &&
+                            s.StreamId==streamId &&
                             s.IsActive == true)
                 .Select(s => new StudentSummaryDto
                 {
@@ -1127,52 +1126,78 @@ namespace VidyaOSServices.Services
 
         public async Task<ApiResult<List<BulkMarksEntryDto>>> GetMarksEntryListAsync(int schoolId, int examId, int classId, int sectionId, int subjectId, int? streamId)
         {
-            // 🚀 Critical: Added .Where(s => s.SchoolId == schoolId)
-            var query = _context.Students.AsNoTracking()
-                .Where(s => s.SchoolId == schoolId && s.ClassId == classId && s.SectionId == sectionId);
+            // 1. Fetch MaxMarks once for the whole class to save database resources
+            var maxMarks = await _context.ExamSubjects
+                .Where(es => es.ExamId == examId && es.SubjectId == subjectId)
+                .Select(es => (int?)es.MaxMarks)
+                .FirstOrDefaultAsync() ?? 100;
 
-            if (streamId.HasValue && streamId > 0)
+            // 2. Build student query with stream isolation
+            var query = _context.Students.AsNoTracking()
+                .Where(s => s.SchoolId == schoolId &&
+                            s.ClassId == classId &&
+                            s.SectionId == sectionId &&
+                            s.IsActive == true);
+
+            if (streamId.HasValue && streamId.Value > 0)
             {
-                query = query.Where(s => s.StreamId == streamId);
+                query = query.Where(s => s.StreamId == streamId.Value);
             }
 
-            var students = await query
-                .OrderBy(s => s.RollNo)
-                .Select(s => new BulkMarksEntryDto
-                {
-                    StudentId = s.StudentId,
-                    RollNo = s.RollNo,
-                    FullName = s.FirstName + " " + s.LastName,
-                    AdmissionNo = s.AdmissionNo,
-                    // 🛡️ Ensure marks are also isolated by this student specifically
-                    MarksObtained = _context.StudentMarks
-                        .Where(m => m.ExamId == examId && m.SubjectId == subjectId && m.StudentId == s.StudentId)
-                        .Select(m => (int?)m.MarksObtained).FirstOrDefault(),
-                    MaxMarks = _context.ExamSubjects
-                        .Where(es => es.ExamId == examId && es.SubjectId == subjectId)
-                        .Select(es => es.MaxMarks).FirstOrDefault()
-                }).ToListAsync();
+            // 3. Use a Left Join for Marks to get everything in ONE database trip
+            var data = await (from s in query
+                              join m in _context.StudentMarks.Where(x => x.ExamId == examId && x.SubjectId == subjectId)
+                              on s.StudentId equals m.StudentId into marksJoin
+                              from m in marksJoin.DefaultIfEmpty()
+                              select new BulkMarksEntryDto
+                              {
+                                  StudentId = s.StudentId,
+                                  RollNo = s.RollNo,
+                                  FullName = s.FirstName + " " + s.LastName,
+                                  AdmissionNo = s.AdmissionNo,
+                                  MarksObtained = (int?)m.MarksObtained, // Null if not entered yet
+                                  MaxMarks = maxMarks
+                              })
+                              .OrderBy(x => x.RollNo)
+                              .ToListAsync();
 
-            students.ForEach(s => { if (s.MaxMarks == 0) s.MaxMarks = 100; });
-            return ApiResult<List<BulkMarksEntryDto>>.Ok(students);
+            return ApiResult<List<BulkMarksEntryDto>>.Ok(data);
         }
-
         public async Task<ApiResult<bool>> SaveBulkMarksAsync(BulkSaveRequest request)
         {
+            // 1. Server-side Validation Loop
+            foreach (var item in request.Marks)
+            {
+                if (item.MarksObtained.HasValue && item.MarksObtained > item.MaxMarks)
+                {
+                    return ApiResult<bool>.Fail($"Validation Error: {item.FullName}'s marks ({item.MarksObtained}) exceed max marks ({item.MaxMarks}).");
+                }
+            }
+
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+                // 2. Optimized Fetching: Get all existing marks for this exam/subject in one trip
+                var studentIds = request.Marks.Select(m => m.StudentId).ToList();
+                var existingMarks = await _context.StudentMarks
+                    .Where(m => m.ExamId == request.ExamId &&
+                                m.SubjectId == request.SubjectId &&
+                                studentIds.Contains(m.StudentId))
+                    .ToListAsync();
+
                 foreach (var item in request.Marks)
                 {
-                    var existing = await _context.StudentMarks
-                        .FirstOrDefaultAsync(m => m.ExamId == request.ExamId && m.SubjectId == request.SubjectId && m.StudentId == item.StudentId);
+                    var existing = existingMarks.FirstOrDefault(m => m.StudentId == item.StudentId);
 
                     if (existing != null)
                     {
+                        // Update existing record
                         existing.MarksObtained = item.MarksObtained ?? 0;
+                        existing.MaxMarks = item.MaxMarks; // Keep MaxMarks synced
                     }
                     else
                     {
+                        // Add new record
                         _context.StudentMarks.Add(new StudentMark
                         {
                             SchoolId = request.SchoolId,
@@ -1182,18 +1207,20 @@ namespace VidyaOSServices.Services
                             StudentId = item.StudentId,
                             MarksObtained = item.MarksObtained ?? 0,
                             MaxMarks = item.MaxMarks,
-
+                            // Optional: You can also store StreamId if your table has the column
                         });
                     }
                 }
+
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
-                return ApiResult<bool>.Ok(true);
+                return ApiResult<bool>.Ok(true, "Bulk marks updated successfully.");
             }
-            catch
+            catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                return ApiResult<bool>.Fail("Database error while saving.");
+                // Log ex for debugging on Azure
+                return ApiResult<bool>.Fail("Database error while saving. Please try again.");
             }
         }
 
@@ -1472,43 +1499,79 @@ namespace VidyaOSServices.Services
         // 3. Assign Subject to Class
         public async Task<ApiResult<bool>> AssignSubjectToClassAsync(AssignSubjectDto dto)
         {
+            // 🚀 FIXED: Check existence including StreamId to allow the same subject in different streams
             var exists = await _context.Subjects.AnyAsync(s =>
-                s.SchoolId == dto.SchoolId && s.ClassId == dto.ClassId && s.SubjectName == dto.SubjectName);
+                s.SchoolId == dto.SchoolId &&
+                s.ClassId == dto.ClassId &&
+                s.SubjectName == dto.SubjectName &&
+                s.StreamId == dto.StreamId); // Added this to differentiate PCM/PCB/Arts/etc.
 
-            if (exists) return ApiResult<bool>.Fail("Subject already assigned to this class.");
+            if (exists)
+            {
+                return ApiResult<bool>.Fail("This subject is already assigned to this specific class and stream.");
+            }
 
             var subject = new Subject
             {
                 SchoolId = dto.SchoolId,
                 ClassId = dto.ClassId,
-                StreamId = dto.StreamId,
+                // Ensure that for junior classes, we pass null if streamId is 0 from the frontend
+                StreamId = dto.StreamId > 0 ? dto.StreamId : null,
                 SubjectName = dto.SubjectName,
                 IsActive = true
             };
 
             _context.Subjects.Add(subject);
             await _context.SaveChangesAsync();
-            return ApiResult<bool>.Ok(true, "Subject assigned to class.");
+
+            return ApiResult<bool>.Ok(true, "Subject assigned successfully.");
         }
 
-        public async Task<ApiResult<List<AssignedSubjectResponseDto>>> GetAssignedSubjectsAsync(int schoolId, int classId)
+        public async Task<ApiResult<List<AssignedSubjectResponseDto>>> GetAssignedSubjectsAsync(int schoolId, int classId, int? streamId)
         {
-            var data = await _context.Subjects
-                .Where(s => s.SchoolId == schoolId && s.ClassId == classId)
-                .Select(s => new AssignedSubjectResponseDto { SubjectId = s.SubjectId, SubjectName = s.SubjectName, ClassId = s.ClassId })
+            // Start with core school and class filters
+            var query = _context.Subjects.AsNoTracking()
+                .Where(s => s.SchoolId == schoolId && s.ClassId == classId);
+
+            // 🚀 Apply Stream isolation
+            // If streamId is provided (Class 11/12), filter by it.
+            // If not provided (Junior classes), look for subjects where StreamId is null.
+            if (streamId.HasValue && streamId.Value > 0)
+            {
+                query = query.Where(s => s.StreamId == streamId.Value);
+            }
+            else if (classId < 11)
+            {
+                query = query.Where(s => s.StreamId == null);
+            }
+
+            var data = await query
+                .Select(s => new AssignedSubjectResponseDto
+                {
+                    SubjectId = s.SubjectId,
+                    SubjectName = s.SubjectName,
+                    ClassId = s.ClassId,
+                    StreamId = s.StreamId // Added to DTO for frontend tracking
+                })
+                .OrderBy(s => s.SubjectName)
                 .ToListAsync();
+
             return ApiResult<List<AssignedSubjectResponseDto>>.Ok(data);
         }
 
         // 4. Delete Assigned Subject (Class level only)
         public async Task<ApiResult<bool>> DeleteAssignedSubjectAsync(int subjectId, int schoolId)
         {
-            var item = await _context.Subjects.FirstOrDefaultAsync(s => s.SubjectId == subjectId && s.SchoolId == schoolId);
+            var item = await _context.Subjects
+                .FirstOrDefaultAsync(s => s.SubjectId == subjectId && s.SchoolId == schoolId);
+
             if (item == null) return ApiResult<bool>.Fail("Assigned subject not found.");
 
-            _context.Subjects.Remove(item);
+            // 🚀 Soft Delete: Keeps data intact but hides it from UI
+            item.IsActive = false;
+
             await _context.SaveChangesAsync();
-            return ApiResult<bool>.Ok(true, "Subject removed from class.");
+            return ApiResult<bool>.Ok(true, "Subject unassigned and deactivated.");
         }
 
         public async Task<ApiResult<bool>> UpdateTimetableBulkAsync(TimetableBulkRequest req)
