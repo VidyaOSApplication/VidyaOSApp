@@ -29,8 +29,8 @@ namespace VidyaOSDAL.DTOs
     {
         public int StudentId { get; set; }
         public int? RollNo { get; set; }
-        public string FullName { get; set; } = null!;
-        public string AdmissionNo { get; set; } = null!;
+        public string? FullName { get; set; } = null!;
+        public string? AdmissionNo { get; set; } = null!;
         public int? MarksObtained { get; set; }
         public int MaxMarks { get; set; }
     }

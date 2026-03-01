@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VidyaOSDAL.DTOs;
 using VidyaOSServices.Services;
@@ -14,6 +15,8 @@ namespace VidyaOSWebAPI.Controllers
         {
            _studentService = service;
         }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public IActionResult GetStudentsForAttendence()
         {
@@ -25,6 +28,7 @@ namespace VidyaOSWebAPI.Controllers
             return NotFound("No students found");
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
         public async Task<IActionResult> RegisterStudent(
         StudentRegisterRequest request)

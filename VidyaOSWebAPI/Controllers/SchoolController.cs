@@ -1,12 +1,13 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using QuestPDF.Fluent;
+using System.Security.Claims;
 using VidyaOSDAL.DTOs;
 using VidyaOSDAL.DTOs.VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
+using VidyaOSHelper;
 using VidyaOSServices.Services;
 using static VidyaOSHelper.SchoolHelper.SchoolHelper;
-using QuestPDF.Fluent;
-using VidyaOSHelper;
 
 namespace VidyaOSWebAPI.Controllers
 {
@@ -20,6 +21,7 @@ namespace VidyaOSWebAPI.Controllers
             _schoolService = service;
         }
 
+        [Authorize(Roles = "SuperAdmin")]
         [HttpPost]
         public async Task<IActionResult> RegisterSchool(
         VidyaOSDAL.DTOs.RegisterSchoolRequest request)
@@ -32,6 +34,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> ViewAttendance(
             [FromQuery] int schoolId,
@@ -52,6 +55,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher,Students")]
         [HttpPost]
         public async Task<IActionResult> ApplyLeave(ApplyLeaveRequest request)
         {
@@ -64,8 +68,8 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // ADMIN
-        [HttpGet]
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpGet]
         public async Task<IActionResult> GetPendingLeaves(int schoolId)
         {
             var result = await _schoolService.GetPendingLeavesAsync(schoolId);
@@ -73,6 +77,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // ADMIN
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpPost]
         public async Task<IActionResult> UpdateLeaveStatus(
             int leaveId,
@@ -88,8 +93,9 @@ namespace VidyaOSWebAPI.Controllers
 
             return Ok(result);
         }
-        [HttpPost]
+
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpPost]
         public async Task<IActionResult> TakeLeaveAction(
     LeaveActionRequest request)
         {
@@ -99,23 +105,26 @@ namespace VidyaOSWebAPI.Controllers
                 ? Ok(result)
                 : BadRequest(result);
         }
-        [HttpPost]
+
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpPost]
         public async Task<IActionResult> SaveFeeStructure(
                                                         FeeStructureRequest request)
         {
             var result = await _schoolService.SaveFeeStructureAsync(request);
             return result.Success ? Ok(result) : BadRequest(result);
         }
-        [HttpGet]
+
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpGet]
         public async Task<IActionResult> GetFeeStructures(int schoolId)
         {
             var result = await _schoolService.GetFeeStructuresAsync(schoolId);
             return Ok(result);
         }
-        [HttpPost]
+
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpPost]
         public async Task<IActionResult> GenerateMonthlyFee(
         [FromBody] GenerateMonthlyFeeRequest request)
         {
@@ -132,8 +141,8 @@ namespace VidyaOSWebAPI.Controllers
 
 
         // 4️⃣ Get Pending Fees (Admin Dashboard)
-        [HttpGet]
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpGet]
         public async Task<IActionResult> GetPendingFees(int schoolId)
         {
             var result = await _schoolService.GetPendingFeesAsync(schoolId);
@@ -141,8 +150,8 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // 5️⃣ Collect / Pay Fee
-        [HttpPost]
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpPost]
         public async Task<IActionResult> CollectFees(CollectFeesRequest request)
         {
             var result = await _schoolService.CollectFeesAsync(request);
@@ -153,6 +162,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // 6️⃣ Student Fee History
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpGet]
         public async Task<IActionResult> GetStudentFeeHistory(int schoolId,int studentId)
         {
@@ -160,6 +170,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpGet("{feeId}")]
         public async Task<IActionResult> DownloadReceipt(int feeId)
         {
@@ -187,6 +198,7 @@ namespace VidyaOSWebAPI.Controllers
             }
         }
 
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpGet]
         public async Task<IActionResult> GetFeeReceipt(
                     int studentId, string feeMonth)
@@ -194,8 +206,9 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GenerateFeeReceiptAsync(studentId, feeMonth);
             return result.Success ? Ok(result) : BadRequest(result);
         }
+
+        [Authorize(Roles = "SchoolAdmin,Teachers")]
         [HttpGet]
-        [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> GetStudentsByClassSection(
             int schoolId,
             int classId,
@@ -207,13 +220,16 @@ namespace VidyaOSWebAPI.Controllers
 
             return Ok(result);
         }
-        [HttpGet]
+
         [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpGet]
         public async Task<IActionResult> GetTodaysBirthdays(int schoolId)
         {
             var result = await _schoolService.GetTodaysBirthdaysAsync(schoolId);
             return Ok(result);
         }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
         public async Task<IActionResult> GenerateRollNos([FromBody] GenerateRollNoRequest req)
         {
@@ -228,7 +244,7 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
-        
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> GetSubjectsForClassSection(
             int schoolId,
@@ -243,6 +259,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // API 1: Called by StudentDirectory.tsx
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> GetStudentsByFilters(int schoolId, int classId, int sectionId, int? streamId)
         {
@@ -252,6 +269,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // API 2: Called by StudentProfile.tsx
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public async Task<IActionResult> GetStudentDetails(int id)
         {
@@ -259,6 +277,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPut]
         public async Task<IActionResult> UpdateStudentDetails([FromBody] StudentDetailsDto dto)
         {
@@ -268,13 +287,16 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public async Task<IActionResult> GetExams(int schoolId) => Ok(await _schoolService.GetExamsOnlyAsync(schoolId));
 
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public async Task<IActionResult> GetSubjects(int schoolId, int classId, int? streamId) =>
             Ok(await _schoolService.GetSubjectsByContextAsync(schoolId, classId, streamId));
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> GetMarksEntryList(int schoolId, int examId, int classId, int sectionId, int subjectId, int? streamId)
         {
@@ -282,10 +304,12 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpPost]
         public async Task<IActionResult> SaveBulkMarks([FromBody] BulkSaveRequest request) =>
             Ok(await _schoolService.SaveBulkMarksAsync(request));
 
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public async Task<IActionResult> GetStudentResultSummary(int studentId, int examId)
         {
@@ -298,7 +322,8 @@ namespace VidyaOSWebAPI.Controllers
 
             return Ok(result);
         }
-        
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public async Task<IActionResult> GetHistory(int schoolId, int userId)
         {
@@ -306,7 +331,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
-        [Authorize(Roles = "Student")]
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public async Task<IActionResult> GetAttendanceHistory(
         [FromQuery] int userId,
@@ -322,7 +347,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
-        [Authorize(Roles = "Student")]
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public async Task<IActionResult> GetFeeStatus([FromQuery] int schoolId, [FromQuery] int studentId)
         {
@@ -340,16 +365,42 @@ namespace VidyaOSWebAPI.Controllers
 
             return BadRequest(result);
         }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
-        public async Task<IActionResult> GetDashboardSummary(int schoolId)
+        public async Task<IActionResult> GetDashboardSummary(int schoolId, int? userId, string role)
         {
+            // 1. Validation
             if (schoolId <= 0)
                 return BadRequest(ApiResult<string>.Fail("Invalid School ID."));
 
-            var result = await _schoolService.GetDashboardSummaryAsync(schoolId);
-            return result.Success ? Ok(result) : NotFound(result);
+            // 2. Role Check
+            if (string.IsNullOrEmpty(role))
+                return BadRequest(ApiResult<string>.Fail("User role is required."));
+
+            // 3. Extract UserId from JWT if frontend didn't pass it (Safety)
+            if (userId == null || userId <= 0)
+            {
+                var nameIdentifier = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!string.IsNullOrEmpty(nameIdentifier))
+                {
+                    userId = int.Parse(nameIdentifier);
+                }
+            }
+
+            // 4. Call Service with the explicit role
+            var result = await _schoolService.GetDashboardSummaryAsync(schoolId, userId ?? 0, role);
+
+            if (!result.Success)
+            {
+                return NotFound(result);
+            }
+
+            return Ok(result);
         }
 
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
         public async Task<IActionResult> AddMaster([FromBody] MasterSubjectDto dto)
         {
@@ -357,6 +408,7 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public async Task<IActionResult> GetAllMasterSubjects([FromQuery] int schoolId)
         {
@@ -369,6 +421,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPut]
         public async Task<IActionResult> UpdateMaster([FromBody] MasterSubjectDto dto)
         {
@@ -377,6 +430,7 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
         public async Task<IActionResult> AssignToClass([FromBody] AssignSubjectDto dto)
         {
@@ -384,10 +438,12 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> GetAssignedSubjects([FromQuery] int schoolId, [FromQuery] int classId, [FromQuery] int? streamId)
     => Ok(await _schoolService.GetAssignedSubjectsAsync(schoolId, classId, streamId));
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpDelete]
         public async Task<IActionResult> DeleteAssigned(int subjectId, int schoolId)
         {
@@ -395,6 +451,7 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
         public async Task<IActionResult> UpdateTimetableBulk([FromBody] TimetableBulkRequest request)
         {
@@ -402,6 +459,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public async Task<IActionResult> GetTimetable(int schoolId, int classId, int sectionId, int? streamId)
         {
@@ -409,6 +467,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet("{schoolId}/{classId}")]
         public async Task<IActionResult> GetStreams(int schoolId, int classId)
         {
@@ -416,6 +475,7 @@ namespace VidyaOSWebAPI.Controllers
             return result.Success ? Ok(result.Data) : BadRequest(result.Message);
         }
 
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpGet("{schoolId}")]
         public async Task<IActionResult> GetProfile(int schoolId)
         {
@@ -424,6 +484,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // POST: api/School/UpdateProfile
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpPost]
         public async Task<IActionResult> UpdateProfile([FromBody] SchoolProfileDto dto)
         {

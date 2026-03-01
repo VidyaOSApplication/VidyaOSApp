@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VidyaOSDAL.DTOs;
 using VidyaOSServices.Services;
@@ -17,6 +18,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // GET: api/SuperAdmin/GetAvailablePlans
+        [Authorize(Roles = "SuperAdmin,SchoolAdmin")]
         [HttpGet]
         public async Task<IActionResult> GetAvailablePlans()
         {
@@ -25,6 +27,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // POST: api/SuperAdmin/ActivateSubscription
+        [Authorize(Roles = "SuperAdmin")]
         [HttpPost]
         public async Task<IActionResult> ActivateSubscription([FromBody] ActivateSubRequest req)
         {
@@ -32,6 +35,7 @@ namespace VidyaOSWebAPI.Controllers
             if (!result.Success) return BadRequest(result);
             return Ok(result);
         }
+        [Authorize(Roles = "SuperAdmin")]
         [HttpGet]
         public async Task<IActionResult> GetAllSchools()
         {

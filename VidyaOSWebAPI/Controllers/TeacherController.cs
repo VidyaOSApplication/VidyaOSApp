@@ -15,6 +15,8 @@ namespace VidyaOSWebAPI.Controllers
         {
             _teacherService = service;
         }
+
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpPost]
         public async Task<IActionResult> RegisterTeacher(
         RegisterTeacherRequest request)
@@ -27,7 +29,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
-        [Authorize(Roles = "Teacher")]
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet("students")]
         public async Task<IActionResult> GetStudents(
            [FromQuery] int schoolId,
@@ -43,7 +45,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // 2️⃣ SAVE attendance
-        [Authorize(Roles = "Teacher")]
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost("mark")]
         public async Task<IActionResult> MarkAttendance(
             [FromBody] AttendanceMarkRequest request)
@@ -52,6 +54,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(new { success = true, message = "Attendance saved successfully." });
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet("Directory/{schoolId}")]
         public async Task<IActionResult> GetDirectory(int schoolId)
         {
@@ -60,6 +63,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // GET: api/Teacher/Profile/5/1
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet("{teacherId}/{schoolId}")]
         public async Task<IActionResult> GetProfile(int teacherId, int schoolId)
         {
@@ -68,6 +72,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // POST: api/Teacher/UpdateProfile
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
         public async Task<IActionResult> UpdateProfile([FromBody] TeacherProfileDto dto)
         {

@@ -1372,46 +1372,61 @@ namespace VidyaOSServices.Services
             return ApiResult<List<FeeHistoryDto>>.Ok(fees);
         }
 
-        public async Task<ApiResult<AdminDashboardSummaryDto>> GetDashboardSummaryAsync(int schoolId)
+        public async Task<ApiResult<DashboardSummaryDto>> GetDashboardSummaryAsync(int schoolId, int userId, string role)
         {
             try
             {
-                // 1. Get counts for Students and Teachers
-                int studentCount = await _context.Students.CountAsync(s => s.SchoolId == schoolId && s.IsActive == true);
-                int teacherCount = await _context.Teachers.CountAsync(t => t.SchoolId == schoolId && t.IsActive == true);
-                string schoolName = await _context.Schools
+                var summary = new DashboardSummaryDto();
+
+                // 1. Common School Name
+                summary.SchoolName = await _context.Schools
                     .Where(s => s.SchoolId == schoolId)
                     .Select(s => s.SchoolName)
-                    .FirstOrDefaultAsync() ?? "VidyaOs School";
+                    .FirstOrDefaultAsync() ?? "VidyaOS School";
 
-                // 2. Get the active subscription and plan details
-                var subData = await _context.Subscriptions
-                    .Where(s => s.SchoolId == schoolId && s.IsActive == true)
-                    .Join(_context.SubscriptionPlans,
-                        sub => sub.PlanId,
-                        plan => plan.PlanId,
-                        (sub, plan) => new { sub, plan })
-                    .OrderByDescending(x => x.sub.EndDate)
-                    .Select(x => new SubscriptionSummaryDto
-                    {
-                        
-                        PlanName = x.plan.PlanName,
-                        EndDate = x.sub.EndDate,
-                        MaxStudents = x.plan.MaxStudents ?? 0
-                    })
-                    .FirstOrDefaultAsync();
-
-                return ApiResult<AdminDashboardSummaryDto>.Ok(new AdminDashboardSummaryDto
+                if (role == "SchoolAdmin")
                 {
-                    SchoolName = schoolName,
-                    TotalStudents = studentCount,
-                    TotalTeachers = teacherCount,
-                    Subscription = subData
-                });
+                    summary.TotalStudents = await _context.Students.CountAsync(s => s.SchoolId == schoolId && s.IsActive==true);
+                    summary.TotalTeachers = await _context.Teachers.CountAsync(t => t.SchoolId == schoolId && t.IsActive==true);
+                    // ... Add subscription logic here ...
+                }
+                else if (role == "Student")
+                {
+                    var student = await _context.Students.FirstOrDefaultAsync(s => s.UserId == userId);
+                    if (student != null)
+                    {
+                        summary.StudentId = student.StudentId;
+                        summary.FullName = student.FirstName + " "+student.LastName;
+                        summary.AdmissionNo = student.AdmissionNo;
+                        summary.RollNo = student.RollNo;
+
+                        // 🚀 Calculate Attendance using your Attendance model
+                        // We count records where the Status is 'Present' vs Total records for this User
+                        var attendanceQuery = _context.Attendances.Where(a => a.UserId == userId);
+
+                        int totalDays = await attendanceQuery.CountAsync();
+                        int presentDays = await attendanceQuery.CountAsync(a => a.Status == "Present");
+
+                        summary.AttendancePercentage = totalDays > 0
+                            ? Math.Round((double)presentDays / totalDays * 100, 1)
+                            : 0;
+                    }
+                }
+                else if (role == "Teacher")
+                {
+                    var teacher = await _context.Teachers.FirstOrDefaultAsync(t => t.UserId == userId);
+                    if (teacher != null)
+                    {
+                        summary.FullName = teacher.FullName;
+                        
+                    }
+                }
+
+                return ApiResult<DashboardSummaryDto>.Ok(summary);
             }
             catch (Exception ex)
             {
-                return ApiResult<AdminDashboardSummaryDto>.Fail("Error loading dashboard data: " + ex.Message);
+                return ApiResult<DashboardSummaryDto>.Fail("Error: " + ex.Message);
             }
         }
 
