@@ -10,6 +10,7 @@ namespace VidyaOSDAL.DTOs
     public class DashboardSummaryDto
     {
         public int StudentId { get; set; }
+        public int? TeacherId { get; set; }
         public string SchoolName { get; set; } = null!;
         public string? Role { get; set; }
 

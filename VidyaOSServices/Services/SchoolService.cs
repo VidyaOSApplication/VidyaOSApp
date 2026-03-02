@@ -1418,7 +1418,8 @@ namespace VidyaOSServices.Services
                     if (teacher != null)
                     {
                         summary.FullName = teacher.FullName;
-                        
+                        summary.TeacherId = teacher.TeacherId;
+
                     }
                 }
 
