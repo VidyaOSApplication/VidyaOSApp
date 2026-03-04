@@ -11,6 +11,7 @@ namespace VidyaOSDAL.DTOs
         public int SchoolId { get; set; }
         public int ClassId { get; set; }
         public int SectionId { get; set; }
+        public int? StreamId { get; set; }
     }
 
 }

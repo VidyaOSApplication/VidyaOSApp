@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
@@ -27,6 +28,14 @@ namespace VidyaOSWebAPI.Controllers
                     message = result.Message
                 });
 
+            return Ok(result);
+        }
+
+        [HttpGet]
+        [Authorize] // Requires the token we just got
+        public async Task<IActionResult> GetUserSession(int userId)
+        {
+            var result = await _authService.GetUserSessionAsync(userId);
             return Ok(result);
         }
     }

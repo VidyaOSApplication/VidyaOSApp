@@ -21,5 +21,7 @@ namespace VidyaOSDAL.DTOs
         public string FeeMonth { get; set; } = "";
         public decimal Amount { get; set; }
         public string PaymentMode { get; set; } = "";
+        public string? RollNo { get; set; }
+        public string? AcademicSession { get; set; }
     }
 }

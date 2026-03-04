@@ -262,7 +262,67 @@ namespace VidyaOSServices.Services
             await _context.SaveChangesAsync();
         }
 
+        public async Task<ApiResult<List<TeacherProfileDto>>> GetTeachersDirectoryAsync(int schoolId)
+        {
+            var teachers = await _context.Teachers
+                .AsNoTracking()
+                .Where(t => t.SchoolId == schoolId && t.IsActive == true)
+                .Select(t => new TeacherProfileDto
+                {
+                    TeacherId = t.TeacherId,
+                    FullName = t.FullName,
+                    Phone = t.Phone,
+                    Email = t.Email,
+                    Qualification = t.Qualification
+                })
+                .OrderBy(t => t.FullName)
+                .ToListAsync();
 
+            return ApiResult<List<TeacherProfileDto>>.Ok(teachers);
+        }
+
+        // Get specific profile details
+        public async Task<ApiResult<TeacherProfileDto>> GetTeacherProfileAsync(int teacherId, int schoolId)
+        {
+            var teacher = await _context.Teachers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.TeacherId == teacherId && t.SchoolId == schoolId);
+
+            if (teacher == null) return ApiResult<TeacherProfileDto>.Fail("Teacher not found.");
+
+            var dto = new TeacherProfileDto
+            {
+                TeacherId = teacher.TeacherId,
+                SchoolId = teacher.SchoolId,
+                FullName = teacher.FullName,
+                Phone = teacher.Phone,
+                Email = teacher.Email,
+                JoiningDate = teacher.JoiningDate,
+                Qualification = teacher.Qualification,
+                IsActive = teacher.IsActive
+            };
+
+            return ApiResult<TeacherProfileDto>.Ok(dto);
+        }
+
+        // Save/Update teacher details
+        public async Task<ApiResult<bool>> UpdateTeacherProfileAsync(TeacherProfileDto dto)
+        {
+            var teacher = await _context.Teachers
+                .FirstOrDefaultAsync(t => t.TeacherId == dto.TeacherId && t.SchoolId == dto.SchoolId);
+
+            if (teacher == null) return ApiResult<bool>.Fail("Teacher record not found.");
+
+            teacher.FullName = dto.FullName;
+            teacher.Phone = dto.Phone;
+            teacher.Email = dto.Email;
+            teacher.JoiningDate = dto.JoiningDate;
+            teacher.Qualification = dto.Qualification;
+            teacher.IsActive = dto.IsActive;
+
+            await _context.SaveChangesAsync();
+            return ApiResult<bool>.Ok(true, "Teacher profile updated successfully.");
+        }
     }
 }
 

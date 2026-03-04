@@ -1,9 +1,13 @@
 ﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using QuestPDF.Fluent;
+using System.Security.Claims;
 using VidyaOSDAL.DTOs;
+using VidyaOSDAL.DTOs.VidyaOSDAL.DTOs;
 using VidyaOSDAL.Models;
+using VidyaOSHelper;
 using VidyaOSServices.Services;
+using static VidyaOSHelper.SchoolHelper.SchoolHelper;
 
 namespace VidyaOSWebAPI.Controllers
 {
@@ -17,6 +21,7 @@ namespace VidyaOSWebAPI.Controllers
             _schoolService = service;
         }
 
+        [Authorize(Roles = "SuperAdmin")]
         [HttpPost]
         public async Task<IActionResult> RegisterSchool(
         VidyaOSDAL.DTOs.RegisterSchoolRequest request)
@@ -29,6 +34,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> ViewAttendance(
             [FromQuery] int schoolId,
@@ -49,6 +55,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
+        [Authorize(Roles = "SchoolAdmin,Teacher,Students")]
         [HttpPost]
         public async Task<IActionResult> ApplyLeave(ApplyLeaveRequest request)
         {
@@ -61,8 +68,8 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // ADMIN
-        [HttpGet]
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpGet]
         public async Task<IActionResult> GetPendingLeaves(int schoolId)
         {
             var result = await _schoolService.GetPendingLeavesAsync(schoolId);
@@ -70,6 +77,7 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // ADMIN
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpPost]
         public async Task<IActionResult> UpdateLeaveStatus(
             int leaveId,
@@ -85,8 +93,9 @@ namespace VidyaOSWebAPI.Controllers
 
             return Ok(result);
         }
-        [HttpPost]
+
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpPost]
         public async Task<IActionResult> TakeLeaveAction(
     LeaveActionRequest request)
         {
@@ -96,25 +105,28 @@ namespace VidyaOSWebAPI.Controllers
                 ? Ok(result)
                 : BadRequest(result);
         }
-        [HttpPost]
+
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpPost]
         public async Task<IActionResult> SaveFeeStructure(
                                                         FeeStructureRequest request)
         {
             var result = await _schoolService.SaveFeeStructureAsync(request);
             return result.Success ? Ok(result) : BadRequest(result);
         }
-        [HttpGet]
+
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpGet]
         public async Task<IActionResult> GetFeeStructures(int schoolId)
         {
             var result = await _schoolService.GetFeeStructuresAsync(schoolId);
             return Ok(result);
         }
-        [HttpPost]
+
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpPost]
         public async Task<IActionResult> GenerateMonthlyFee(
-    [FromBody] GenerateMonthlyFeeRequest request)
+        [FromBody] GenerateMonthlyFeeRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.FeeMonth))
                 return BadRequest("Invalid request");
@@ -129,8 +141,8 @@ namespace VidyaOSWebAPI.Controllers
 
 
         // 4️⃣ Get Pending Fees (Admin Dashboard)
-        [HttpGet]
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpGet]
         public async Task<IActionResult> GetPendingFees(int schoolId)
         {
             var result = await _schoolService.GetPendingFeesAsync(schoolId);
@@ -138,8 +150,8 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // 5️⃣ Collect / Pay Fee
-        [HttpPost]
         [Authorize(Roles = "SchoolAdmin")]
+        [HttpPost]
         public async Task<IActionResult> CollectFees(CollectFeesRequest request)
         {
             var result = await _schoolService.CollectFeesAsync(request);
@@ -150,12 +162,43 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // 6️⃣ Student Fee History
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpGet]
-        public async Task<IActionResult> GetStudentFeeHistory(int studentId)
+        public async Task<IActionResult> GetStudentFeeHistory(int schoolId,int studentId)
         {
-            var result = await _schoolService.GetStudentFeeHistoryAsync(studentId);
+            var result = await _schoolService.GetStudentFeeHistoryAsync(schoolId,studentId);
             return Ok(result);
         }
+
+        [Authorize(Roles = "SchoolAdmin")]
+        [HttpGet("{feeId}")]
+        public async Task<IActionResult> DownloadReceipt(int feeId)
+        {
+            try
+            {
+                // 🚀 Fetch data and generate PDF via Service
+                var receiptData = await _schoolService.GetReceiptDataAsync(feeId);
+                if (receiptData == null) return NotFound("Receipt data not found.");
+
+                var pdfBytes = await _schoolService.GenerateFeeReceiptPdfAsync(feeId);
+
+                // 🚀 Filename in IST: FirstName_Class_Section_ddMMyyyy.pdf
+                string dateFormatted = receiptData.GenerationDateTime.ToString("ddMMyyyy");
+                string studentFirstName = (receiptData.StudentName ?? "Student").Split(' ')[0];
+                string className = receiptData.ClassName?.Replace(" ", "") ?? "Class";
+                string sectionName = receiptData.SectionName?.Replace(" ", "") ?? "Sec";
+
+                string fileName = $"{studentFirstName}_{className}_{sectionName}_{dateFormatted}.pdf";
+
+                return File(pdfBytes, "application/pdf", fileName);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal Server Error: {ex.Message}");
+            }
+        }
+
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpGet]
         public async Task<IActionResult> GetFeeReceipt(
                     int studentId, string feeMonth)
@@ -163,100 +206,45 @@ namespace VidyaOSWebAPI.Controllers
             var result = await _schoolService.GenerateFeeReceiptAsync(studentId, feeMonth);
             return result.Success ? Ok(result) : BadRequest(result);
         }
+
+        [Authorize(Roles = "SchoolAdmin,Teachers")]
         [HttpGet]
-        [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> GetStudentsByClassSection(
             int schoolId,
             int classId,
-            int sectionId)
+            int sectionId,
+            int? streamId = null)
         {
             var result = await _schoolService.GetStudentsByClassSectionAsync(
-                schoolId, classId, sectionId);
+                schoolId, classId, sectionId,streamId );
 
             return Ok(result);
         }
-        [HttpGet]
+
         [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpGet]
         public async Task<IActionResult> GetTodaysBirthdays(int schoolId)
         {
             var result = await _schoolService.GetTodaysBirthdaysAsync(schoolId);
             return Ok(result);
         }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
-        public async Task<IActionResult> GenerateRollNos(
-                        GenerateRollNoRequest req)
+        public async Task<IActionResult> GenerateRollNos([FromBody] GenerateRollNoRequest req)
         {
-            var result = await _schoolService
-                .GenerateRollNumbersAlphabeticallyAsync(
-                    req.SchoolId, req.ClassId, req.SectionId);
+            // Pass the StreamId from the request to the service
+            // If req.StreamId is null, the service uses its default parameter
+            var result = await _schoolService.GenerateRollNumbersAlphabeticallyAsync(
+                req.SchoolId,
+                req.ClassId,
+                req.SectionId,
+                req.StreamId);
 
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPost]
-        public async Task<IActionResult> CreateClassTimeTable(
-           [FromBody] CreateTimetableRequest request)
-        {
-            if (request == null)
-                return BadRequest("Request body is required.");
-
-            var result = await _schoolService.CreateClassTimetableAsync(request);
-            return Ok(result);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> GetClassTimetable(
-            int schoolId, int classId, int? sectionId,string academicYear)
-        {
-            var result = await _schoolService
-                .GetClassTimetableAsync(schoolId, classId, sectionId, academicYear);
-
-            return Ok(result);
-        }
-        [HttpPost]
-        [Authorize(Roles = "SchoolAdmin")]
-        public async Task<IActionResult> AssignClassSubjects(
-        AssignClassSubjectsRequest request)
-        {
-            var result = await _schoolService.AssignSubjectsToClassAsync(request);
-            return result.Success ? Ok(result) : BadRequest(result);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> GetSubjectsForAssignment(
-                int schoolId,
-                int classId,
-                int? streamId)
-        {
-            var result = await _schoolService
-                .GetSubjectsForClassAsync(schoolId, classId, streamId);
-
-            return Ok(result);
-        }
-        [HttpPost]
-        public async Task<IActionResult> AddMasterSubject(
-        [FromBody] AddMasterSubjectRequest request)
-        {
-            var result = await _schoolService.AddMasterSubjectAsync(request);
-            return result.Success ? Ok(result) : BadRequest(result);
-        }
-
-        // 📥 Get all master subjects
-        [HttpGet]
-        public async Task<IActionResult> GetMasterSubjects(
-            [FromQuery] int schoolId)
-        {
-            var result = await _schoolService.GetMasterSubjectsAsync(schoolId);
-            return Ok(result);
-        }
-
-        // 🗑️ Delete master subject
-        [HttpDelete]
-        public async Task<IActionResult> DeleteMasterSubject(int id)
-        {
-            var result = await _schoolService.DeleteMasterSubjectAsync(id);
-            return result.Success ? Ok(result) : BadRequest(result);
-        }
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> GetSubjectsForClassSection(
             int schoolId,
@@ -268,6 +256,242 @@ namespace VidyaOSWebAPI.Controllers
                     schoolId, classId, sectionId);
 
             return Ok(result);
+        }
+
+        // API 1: Called by StudentDirectory.tsx
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpGet]
+        public async Task<IActionResult> GetStudentsByFilters(int schoolId, int classId, int sectionId, int? streamId)
+        {
+            // The nullable int? streamId correctly handles both junior and senior classes
+            var result = await _schoolService.GetStudentsByClassSectionAsync(schoolId, classId, sectionId, streamId);
+            return Ok(result);
+        }
+
+        // API 2: Called by StudentProfile.tsx
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetStudentDetails(int id)
+        {
+            var result = await _schoolService.GetStudentDetailsAsync(id);
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpPut]
+        public async Task<IActionResult> UpdateStudentDetails([FromBody] StudentDetailsDto dto)
+        {
+            if (dto.StudentId <= 0) return BadRequest(ApiResult<bool>.Fail("Invalid ID"));
+
+            var result = await _schoolService.UpdateStudentDetailsAsync(dto);
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetExams(int schoolId) => Ok(await _schoolService.GetExamsOnlyAsync(schoolId));
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetSubjects(int schoolId, int classId, int? streamId) =>
+            Ok(await _schoolService.GetSubjectsByContextAsync(schoolId, classId, streamId));
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpGet]
+        public async Task<IActionResult> GetMarksEntryList(int schoolId, int examId, int classId, int sectionId, int subjectId, int? streamId)
+        {
+            var result = await _schoolService.GetMarksEntryListAsync(schoolId, examId, classId, sectionId, subjectId, streamId);
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpPost]
+        public async Task<IActionResult> SaveBulkMarks([FromBody] BulkSaveRequest request) =>
+            Ok(await _schoolService.SaveBulkMarksAsync(request));
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetStudentResultSummary(int studentId, int examId)
+        {
+            var result = await _schoolService.GetStudentResultSummaryAsync(studentId, examId);
+
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetHistory(int schoolId, int userId)
+        {
+            var result = await _schoolService.GetUserLeaveHistoryAsync(schoolId, userId);
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetAttendanceHistory(
+        [FromQuery] int userId,
+        [FromQuery] int month,
+        [FromQuery] int year)
+        {
+            if (userId <= 0 || month < 1 || month > 12)
+                return BadRequest("Invalid parameters. Month must be 1-12.");
+
+            var result = await _schoolService.GetStudentMonthlyAttendanceAsync(userId, month, year);
+
+            if (!result.Success) return BadRequest(result);
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetFeeStatus([FromQuery] int schoolId, [FromQuery] int studentId)
+        {
+            if (schoolId <= 0 || studentId <= 0)
+            {
+                return BadRequest(ApiResult<List<FeeHistoryDto>>.Fail("Invalid School or Student ID."));
+            }
+
+            var result = await _schoolService.GetStudentFeeStatusAsync(schoolId, studentId);
+
+            if (result.Success)
+            {
+                return Ok(result);
+            }
+
+            return BadRequest(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetDashboardSummary(int schoolId, int? userId, string role)
+        {
+            // 1. Validation
+            if (schoolId <= 0)
+                return BadRequest(ApiResult<string>.Fail("Invalid School ID."));
+
+            // 2. Role Check
+            if (string.IsNullOrEmpty(role))
+                return BadRequest(ApiResult<string>.Fail("User role is required."));
+
+            // 3. Extract UserId from JWT if frontend didn't pass it (Safety)
+            if (userId == null || userId <= 0)
+            {
+                var nameIdentifier = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!string.IsNullOrEmpty(nameIdentifier))
+                {
+                    userId = int.Parse(nameIdentifier);
+                }
+            }
+
+            // 4. Call Service with the explicit role
+            var result = await _schoolService.GetDashboardSummaryAsync(schoolId, userId ?? 0, role);
+
+            if (!result.Success)
+            {
+                return NotFound(result);
+            }
+
+            return Ok(result);
+        }
+
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpPost]
+        public async Task<IActionResult> AddMaster([FromBody] MasterSubjectDto dto)
+        {
+            var result = await _schoolService.AddMasterSubjectAsync(dto);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetAllMasterSubjects([FromQuery] int schoolId)
+        {
+            if (schoolId <= 0)
+                return BadRequest(ApiResult<string>.Fail("Invalid School ID."));
+
+            var result = await _schoolService.GetAllMasterSubjectsAsync(schoolId);
+
+            if (!result.Success) return BadRequest(result);
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpPut]
+        public async Task<IActionResult> UpdateMaster([FromBody] MasterSubjectDto dto)
+        {
+            if (dto.MasterSubjectId == null) return BadRequest("MasterSubjectId is required.");
+            var result = await _schoolService.UpdateMasterSubjectAsync(dto);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpPost]
+        public async Task<IActionResult> AssignToClass([FromBody] AssignSubjectDto dto)
+        {
+            var result = await _schoolService.AssignSubjectToClassAsync(dto);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpGet]
+        public async Task<IActionResult> GetAssignedSubjects([FromQuery] int schoolId, [FromQuery] int classId, [FromQuery] int? streamId)
+    => Ok(await _schoolService.GetAssignedSubjectsAsync(schoolId, classId, streamId));
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpDelete]
+        public async Task<IActionResult> DeleteAssigned(int subjectId, int schoolId)
+        {
+            var result = await _schoolService.DeleteAssignedSubjectAsync(subjectId, schoolId);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpPost]
+        public async Task<IActionResult> UpdateTimetableBulk([FromBody] TimetableBulkRequest request)
+        {
+            var result = await _schoolService.UpdateTimetableBulkAsync(request);
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet]
+        public async Task<IActionResult> GetTimetable(int schoolId, int classId, int sectionId, int? streamId)
+        {
+            var result = await _schoolService.GetTimetableAsync(schoolId, classId, sectionId, streamId);
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
+        [HttpGet("{schoolId}/{classId}")]
+        public async Task<IActionResult> GetStreams(int schoolId, int classId)
+        {
+            var result = await _schoolService.GetStreamsByClassAsync(schoolId, classId);
+            return result.Success ? Ok(result.Data) : BadRequest(result.Message);
+        }
+
+        [Authorize(Roles = "SchoolAdmin")]
+        [HttpGet("{schoolId}")]
+        public async Task<IActionResult> GetProfile(int schoolId)
+        {
+            var result = await _schoolService.GetSchoolProfileAsync(schoolId);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        // POST: api/School/UpdateProfile
+        [Authorize(Roles = "SchoolAdmin")]
+        [HttpPost]
+        public async Task<IActionResult> UpdateProfile([FromBody] SchoolProfileDto dto)
+        {
+            if (dto == null || dto.SchoolId <= 0) return BadRequest("Invalid Data");
+
+            var result = await _schoolService.UpdateSchoolProfileAsync(dto);
+            return result.Success ? Ok(result) : BadRequest(result);
         }
 
     }

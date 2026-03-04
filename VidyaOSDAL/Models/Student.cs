@@ -50,4 +50,6 @@ public partial class Student
     public DateTime? CreatedAt { get; set; }
 
     public int? StreamId { get; set; }
+
+    public string? Category { get; set; }
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using VidyaOSDAL.DTOs;
 using VidyaOSServices.Services;
 
@@ -18,6 +19,7 @@ namespace VidyaOSWebAPI.Controllers
         // =========================================================
         // 1️⃣ CREATE EXAM
         // =========================================================
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
         public async Task<IActionResult> CreateExam(CreateExamRequest request)
         {
@@ -28,6 +30,7 @@ namespace VidyaOSWebAPI.Controllers
         // =========================================================
         // 2️⃣ LIST EXAMS (Exam Dashboard / Exam List)
         // =========================================================
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpGet]
         public async Task<IActionResult> GetExams(int schoolId)
         {
@@ -39,7 +42,9 @@ namespace VidyaOSWebAPI.Controllers
         // 3️⃣ GET SUBJECTS FOR SCHEDULING EXAM
         // (AUTO syllabus subjects – no manual selection)
         // =========================================================
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
+        
         public async Task<IActionResult> GetScheduleSubjects(
             int examId,
             int classId,
@@ -54,7 +59,9 @@ namespace VidyaOSWebAPI.Controllers
         // =========================================================
         // 4️⃣ SAVE EXAM SCHEDULE (DATE + MAX MARKS)
         // =========================================================
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
+
         public async Task<IActionResult> SaveExamSchedule(
             int examId,
             int classId,
@@ -69,6 +76,7 @@ namespace VidyaOSWebAPI.Controllers
         // =========================================================
         // 5️⃣ SUBJECT LIST FOR ENTER MARKS
         // =========================================================
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> GetSubjectsForMarks(
             int examId,
@@ -83,6 +91,7 @@ namespace VidyaOSWebAPI.Controllers
         // =========================================================
         // 6️⃣ STUDENTS FOR ENTER MARKS (OPTIONAL STREAM)
         // =========================================================
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> GetStudentsForMarks(
             int examId,
@@ -99,6 +108,7 @@ namespace VidyaOSWebAPI.Controllers
         // =========================================================
         // 7️⃣ SAVE STUDENT MARKS
         // =========================================================
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
         public async Task<IActionResult> SaveMarks(
             [FromBody] SaveStudentMarksRequest request)
@@ -110,6 +120,7 @@ namespace VidyaOSWebAPI.Controllers
         // =========================================================
         // 8️⃣ CHECK IF RESULT CAN BE DECLARED
         // =========================================================
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> CanDeclareResult(int examId)
         {
@@ -120,12 +131,14 @@ namespace VidyaOSWebAPI.Controllers
         // =========================================================
         // 9️⃣ DECLARE RESULT
         // =========================================================
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
         public async Task<IActionResult> DeclareResult(int examId)
         {
             var result = await _service.DeclareResultAsync(examId);
             return result.Success ? Ok(result) : BadRequest(result);
         }
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet]
         public async Task<IActionResult> GetSubjectsForSchedule(
                     int examId,
@@ -138,6 +151,8 @@ namespace VidyaOSWebAPI.Controllers
 
             return result.Success ? Ok(result) : BadRequest(result);
         }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost]
         public async Task<IActionResult> ScheduleExam([FromBody] ScheduleExamRequest request)
         {

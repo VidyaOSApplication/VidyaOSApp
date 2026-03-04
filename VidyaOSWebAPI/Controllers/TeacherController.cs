@@ -15,6 +15,8 @@ namespace VidyaOSWebAPI.Controllers
         {
             _teacherService = service;
         }
+
+        [Authorize(Roles = "SchoolAdmin")]
         [HttpPost]
         public async Task<IActionResult> RegisterTeacher(
         RegisterTeacherRequest request)
@@ -27,13 +29,13 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
-        [Authorize(Roles = "Teacher")]
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpGet("students")]
         public async Task<IActionResult> GetStudents(
            [FromQuery] int schoolId,
            [FromQuery] int classId,
            [FromQuery] int sectionId,
-           [FromQuery] int streamId,
+           [FromQuery] int? streamId,
            [FromQuery] DateOnly date)
         {
             var result = await _teacherService
@@ -43,13 +45,40 @@ namespace VidyaOSWebAPI.Controllers
         }
 
         // 2️⃣ SAVE attendance
-        [Authorize(Roles = "Teacher")]
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
         [HttpPost("mark")]
         public async Task<IActionResult> MarkAttendance(
             [FromBody] AttendanceMarkRequest request)
         {
             await _teacherService.SaveAttendanceAsync(request);
             return Ok(new { success = true, message = "Attendance saved successfully." });
+        }
+
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpGet("Directory/{schoolId}")]
+        public async Task<IActionResult> GetDirectory(int schoolId)
+        {
+            var result = await _teacherService.GetTeachersDirectoryAsync(schoolId);
+            return Ok(result);
+        }
+
+        // GET: api/Teacher/Profile/5/1
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpGet("{teacherId}/{schoolId}")]
+        public async Task<IActionResult> GetProfile(int teacherId, int schoolId)
+        {
+            var result = await _teacherService.GetTeacherProfileAsync(teacherId, schoolId);
+            return result.Success ? Ok(result) : NotFound(result);
+        }
+
+        // POST: api/Teacher/UpdateProfile
+        [Authorize(Roles = "SchoolAdmin,Teacher")]
+        [HttpPost]
+        public async Task<IActionResult> UpdateProfile([FromBody] TeacherProfileDto dto)
+        {
+            if (dto == null) return BadRequest("Invalid payload.");
+            var result = await _teacherService.UpdateTeacherProfileAsync(dto);
+            return result.Success ? Ok(result) : BadRequest(result);
         }
     }
 }

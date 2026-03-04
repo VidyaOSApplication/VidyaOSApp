@@ -9,9 +9,10 @@ namespace VidyaOSDAL.DTOs
     public class CreateExamRequest
     {
         public int SchoolId { get; set; }
-        public string ExamName { get; set; } = "";
-        public string AcademicYear { get; set; } = "";
-        public List<int> ClassIds { get; set; } = new();
+        public string ExamName { get; set; } = string.Empty;
+        public string AcademicYear { get; set; } = string.Empty;
+        public DateTime? StartDate { get; set; } // Using DateTime for easy JSON parsing
+        public DateTime? EndDate { get; set; }
     }
 
 }

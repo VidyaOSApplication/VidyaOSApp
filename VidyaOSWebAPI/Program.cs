@@ -6,6 +6,7 @@ using System.Text;
 using VidyaOSDAL.Models;
 using VidyaOSHelper;
 using VidyaOSServices.Services;
+using QuestPDF.Infrastructure;
 
 namespace VidyaOSWebAPI
 {
@@ -17,14 +18,11 @@ namespace VidyaOSWebAPI
 
             // -------------------- SERVICES --------------------
 
-            // Controllers
             builder.Services.AddControllers();
 
-            // DbContext
+            // ✅ FIXED — Removed EnableRetryOnFailure to support manual transactions
             builder.Services.AddDbContext<VidyaOsContext>(options =>
-                options.UseSqlServer(
-                    builder.Configuration.GetConnectionString("DefaultConnection")
-                )
+                options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
             );
 
             // JWT Authentication
@@ -44,24 +42,30 @@ namespace VidyaOSWebAPI
                             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
                         ),
 
-                        // 🔥 REQUIRED FOR ROLE-BASED AUTH
                         RoleClaimType = ClaimTypes.Role,
                         NameClaimType = ClaimTypes.NameIdentifier
                     };
                 });
 
-            // 🔥 REQUIRED for [Authorize(Roles = "...")]
             builder.Services.AddAuthorization();
 
-            // CORS (Ionic / Angular)
+            // 🔥 UPDATED CORS POLICY
             builder.Services.AddCors(options =>
             {
-                options.AddPolicy("AllowIonicApp", policy =>
+                options.AddPolicy("AllowFrontendApps", policy =>
                 {
                     policy
                         .WithOrigins(
-                            "http://localhost:8100", // Ionic
-                            "http://localhost:4200"  // Angular (optional)
+                            "http://vidyaos.online",
+                            "https://vidyaos.online",
+                            "http://www.vidyaos.online",
+                            "https://www.vidyaos.online",
+                            "http://localhost:8100",
+                            "http://localhost:4200",
+                            "https://localhost",
+                            "http://localhost",
+                            "http://localhost:8081",
+                            "http://localhost:19006"
                         )
                         .AllowAnyHeader()
                         .AllowAnyMethod()
@@ -69,9 +73,34 @@ namespace VidyaOSWebAPI
                 });
             });
 
-            // Swagger
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                {
+                    Name = "Authorization",
+                    Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+                    Scheme = "bearer",
+                    BearerFormat = "JWT",
+                    In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+                    Description = "Enter: Bearer {your JWT token}"
+                });
+
+                options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+                {
+                    {
+                        new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                        {
+                            Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                            {
+                                Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                                Id = "Bearer"
+                            }
+                        },
+                        new string[] {}
+                    }
+                });
+            });
 
             // Dependency Injection
             builder.Services.AddScoped<StudentService>();
@@ -84,40 +113,25 @@ namespace VidyaOSWebAPI
             builder.Services.AddScoped<StudentHelper>();
             builder.Services.AddScoped<TeacherHelper>();
             builder.Services.AddScoped<ExamService>();
+            builder.Services.AddScoped<SubscriptionService>();
             builder.Services.AddScoped<VidyaOSHelper.SchoolHelper.SchoolHelper>();
+
+            QuestPDF.Settings.License = LicenseType.Community;
 
             var app = builder.Build();
 
             // -------------------- MIDDLEWARE --------------------
 
-            if (app.Environment.IsDevelopment())
-            {
-                app.UseSwagger();
-                app.UseSwaggerUI();
-            }
+            app.UseSwagger();
+            app.UseSwaggerUI();
 
             app.UseHttpsRedirection();
-
             app.UseRouting();
 
-            // 🔥 CORS MUST RUN BEFORE AUTH
-            app.UseCors("AllowIonicApp");
+            // 🔥 CORS MUST COME BEFORE AUTHENTICATION
+            app.UseCors("AllowFrontendApps");
 
-            // 🔥 ALLOW PREFLIGHT (OPTIONS) REQUESTS — PRODUCTION SAFE
-            app.Use(async (context, next) =>
-            {
-                if (context.Request.Method == HttpMethods.Options)
-                {
-                    context.Response.StatusCode = StatusCodes.Status200OK;
-                    return;
-                }
-                await next();
-            });
-
-            // 🔥 AUTHENTICATION FIRST
             app.UseAuthentication();
-
-            // 🔥 AUTHORIZATION SECOND
             app.UseAuthorization();
 
             app.MapControllers();
