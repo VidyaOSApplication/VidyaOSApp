@@ -1058,6 +1058,60 @@ namespace VidyaOSServices.Services
             return ApiResult<StudentDetailsDto>.Ok(student);
         }
 
+        public async Task<ApiResult<StudentDetailsDto>> GetStudentDetailsForGroqAsync(int studentId,int schoolId)
+        {
+            var student = await _context.Students
+                .AsNoTracking()
+                .Where(s => s.StudentId == studentId && s.SchoolId==schoolId)
+                .Select(s => new StudentDetailsDto
+                {
+                    StudentId = s.StudentId,
+                    // Concatenate names for the FullName property
+                    FullName = (s.FirstName + " " + s.LastName).Trim(),
+                    AdmissionNo = s.AdmissionNo,
+                    RollNo = s.RollNo,
+                    AcademicYear = s.AcademicYear,
+
+                    // 🚀 Logic for Prefilling Selectors
+                    ClassId = s.ClassId,
+                    SectionId = s.SectionId,
+                    StreamId = s.StreamId,
+                    Gender = s.Gender,
+
+                    // 📅 Date Conversion for Frontend Compatibility
+                    Dob = s.Dob.HasValue
+                        ? new DateTime(s.Dob.Value.Year, s.Dob.Value.Month, s.Dob.Value.Day)
+                        : null,
+
+                    // 🏢 Join School Name
+                    SchoolName = _context.Schools
+                        .Where(sch => sch.SchoolId == s.SchoolId)
+                        .Select(sch => sch.SchoolName)
+                        .FirstOrDefault() ?? "VidyaOS Academy",
+
+                    // 🔑 Map Class Name based on ID
+                    ClassName = _context.Classes
+                        .Where(c => c.SchoolId == s.SchoolId && c.ClassId == s.ClassId)
+                        .Select(c => c.ClassName).FirstOrDefault() ?? "N/A",
+
+                    // 🔑 Map Section Name based on ID
+                    SectionName = _context.Sections
+                        .Where(sec => sec.SchoolId == s.SchoolId && sec.ClassId == s.ClassId && sec.SectionId == s.SectionId)
+                        .Select(sec => sec.SectionName).FirstOrDefault() ?? "N/A",
+
+                    ParentPhone = s.ParentPhone,
+                    FatherName = s.FatherName,
+                    MotherName = s.MotherName,
+                    AddressLine1 = s.AddressLine1,
+                    City = s.City,
+                    State = s.State
+                }).FirstOrDefaultAsync();
+
+            if (student == null) return ApiResult<StudentDetailsDto>.Fail("Student not found.");
+
+            return ApiResult<StudentDetailsDto>.Ok(student);
+        }
+
         public async Task<ApiResult<bool>> UpdateStudentDetailsAsync(StudentDetailsDto dto)
         {
             var student = await _context.Students

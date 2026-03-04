@@ -7,6 +7,7 @@ using VidyaOSDAL.Models;
 using VidyaOSHelper;
 using VidyaOSServices.Services;
 using QuestPDF.Infrastructure;
+using Microsoft.OpenApi.Models; // Added for Swagger Types
 
 namespace VidyaOSWebAPI
 {
@@ -17,15 +18,13 @@ namespace VidyaOSWebAPI
             var builder = WebApplication.CreateBuilder(args);
 
             // -------------------- SERVICES --------------------
-
             builder.Services.AddControllers();
 
-            // ✅ FIXED — Removed EnableRetryOnFailure to support manual transactions
             builder.Services.AddDbContext<VidyaOsContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
             );
 
-            // JWT Authentication
+            // JWT Authentication Setup
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
@@ -35,13 +34,11 @@ namespace VidyaOSWebAPI
                         ValidateAudience = true,
                         ValidateLifetime = true,
                         ValidateIssuerSigningKey = true,
-
                         ValidIssuer = builder.Configuration["Jwt:Issuer"],
                         ValidAudience = builder.Configuration["Jwt:Audience"],
                         IssuerSigningKey = new SymmetricSecurityKey(
                             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
                         ),
-
                         RoleClaimType = ClaimTypes.Role,
                         NameClaimType = ClaimTypes.NameIdentifier
                     };
@@ -49,23 +46,16 @@ namespace VidyaOSWebAPI
 
             builder.Services.AddAuthorization();
 
-            // 🔥 UPDATED CORS POLICY
+            // CORS Policy
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowFrontendApps", policy =>
                 {
-                    policy
-                        .WithOrigins(
-                            "http://vidyaos.online",
-                            "https://vidyaos.online",
-                            "http://www.vidyaos.online",
-                            "https://www.vidyaos.online",
-                            "http://localhost:8100",
-                            "http://localhost:4200",
-                            "https://localhost",
-                            "http://localhost",
-                            "http://localhost:8081",
-                            "http://localhost:19006"
+                    policy.WithOrigins(
+                            "http://vidyaos.online", "https://vidyaos.online",
+                            "http://www.vidyaos.online", "https://www.vidyaos.online",
+                            "http://localhost:8100", "http://localhost:4200",
+                            "http://localhost:8081", "http://localhost:19006"
                         )
                         .AllowAnyHeader()
                         .AllowAnyMethod()
@@ -73,36 +63,39 @@ namespace VidyaOSWebAPI
                 });
             });
 
+            // -------------------- SWAGGER SETUP --------------------
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen(options =>
+            builder.Services.AddSwaggerGen(c =>
             {
-                options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                c.SwaggerDoc("v1", new OpenApiInfo { Title = "VidyaOS Web API", Version = "v1" });
+
+                // This enables the "Authorize" button in Swagger
+                c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                 {
+                    Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
                     Name = "Authorization",
-                    Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
-                    Scheme = "bearer",
-                    BearerFormat = "JWT",
-                    In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-                    Description = "Enter: Bearer {your JWT token}"
+                    In = ParameterLocation.Header,
+                    Type = SecuritySchemeType.ApiKey,
+                    Scheme = "Bearer"
                 });
 
-                options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+                c.AddSecurityRequirement(new OpenApiSecurityRequirement
                 {
                     {
-                        new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                        new OpenApiSecurityScheme
                         {
-                            Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                            Reference = new OpenApiReference
                             {
-                                Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                                Type = ReferenceType.SecurityScheme,
                                 Id = "Bearer"
                             }
                         },
-                        new string[] {}
+                        Array.Empty<string>()
                     }
                 });
             });
 
-            // Dependency Injection
+            // Dependency Injection - Standard Services
             builder.Services.AddScoped<StudentService>();
             builder.Services.AddScoped<SchoolService>();
             builder.Services.AddScoped<TeacherService>();
@@ -114,28 +107,38 @@ namespace VidyaOSWebAPI
             builder.Services.AddScoped<TeacherHelper>();
             builder.Services.AddScoped<ExamService>();
             builder.Services.AddScoped<SubscriptionService>();
+            builder.Services.AddScoped<AIChatService>();
+            builder.Services.AddHttpClient<AIChatService>();
+            
+
             builder.Services.AddScoped<VidyaOSHelper.SchoolHelper.SchoolHelper>();
+
+            // ✅ Correct Typed Client Registration
+          
 
             QuestPDF.Settings.License = LicenseType.Community;
 
             var app = builder.Build();
 
             // -------------------- MIDDLEWARE --------------------
-
+            // Enable Swagger for both Development and Production so you can test on Azure
             app.UseSwagger();
-            app.UseSwaggerUI();
+            app.UseSwaggerUI(c =>
+            {
+                c.SwaggerEndpoint("/swagger/v1/swagger.json", "VidyaOS API v1");
+                c.RoutePrefix = string.Empty; // Sets Swagger as the default home page
+            });
 
             app.UseHttpsRedirection();
             app.UseRouting();
 
-            // 🔥 CORS MUST COME BEFORE AUTHENTICATION
+            // 🔥 Order is Critical: CORS must be before Auth
             app.UseCors("AllowFrontendApps");
 
             app.UseAuthentication();
             app.UseAuthorization();
 
             app.MapControllers();
-
             app.Run();
         }
     }

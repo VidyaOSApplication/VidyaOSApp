@@ -55,7 +55,7 @@ namespace VidyaOSWebAPI.Controllers
             return Ok(result);
         }
 
-        [Authorize(Roles = "SchoolAdmin,Teacher,Students")]
+        [Authorize(Roles = "SchoolAdmin,Teacher,Student")]
         [HttpPost]
         public async Task<IActionResult> ApplyLeave(ApplyLeaveRequest request)
         {
